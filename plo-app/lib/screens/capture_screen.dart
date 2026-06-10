@@ -49,7 +49,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
   int _buttonSeat = 1; // chosen by tapping the ring on the seat-select step
   static const int _heroSeat = 1; // hero is always "you", anchored bottom
   _StraddleChoice _straddle = _StraddleChoice.none;
-  StraddleActionRule _rule = StraddleActionRule.utgFirstStraddlerLast;
   bool _markedForReview = false;
 
   // ---- live hand state
@@ -107,7 +106,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
       smallBlind: sb,
       bigBlind: bb,
       forcedBets: forced,
-      straddleRule: _rule,
+      // A button straddle always plays SB-first (SB opens, straddler acts last).
+      // That's the only house rule in these games, so it's not a user choice.
+      straddleRule: StraddleActionRule.sbFirst,
       heroSeat: _heroSeat,
       gameType: widget.session.gameType,
       mttLevel: _isMtt
@@ -378,21 +379,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
               onSelected: (_) => setState(() => _straddle = c),
             ),
         ]),
-        if (_straddle == _StraddleChoice.button) ...[
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
-            for (final (r, label) in [
-              (StraddleActionRule.utgFirstStraddlerLast,
-                  'UTG opens, straddler last'),
-              (StraddleActionRule.sbFirst, 'SB opens'),
-            ])
-              ChoiceChip(
-                label: Text(label),
-                selected: _rule == r,
-                onSelected: (_) => setState(() => _rule = r),
-              ),
-          ]),
-        ],
         const SizedBox(height: 24),
         FilledButton(
           style: FilledButton.styleFrom(
