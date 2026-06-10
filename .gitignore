@@ -22,3 +22,4 @@ token.txt
 # Generated solver hand-off artifacts
 /sample_bundle/
 /sample_population_bundle.zip
+/sample_captures/
