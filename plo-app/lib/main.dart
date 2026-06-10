@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
-import 'screens/session_list_screen.dart';
+import 'screens/landing_screen.dart';
 
 void main() {
   // In the browser, route sqflite through the IndexedDB/wasm web factory so
@@ -34,7 +34,7 @@ class PloCaptureApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0C0F0E),
         sliderTheme: const SliderThemeData(showValueIndicator: ShowValueIndicator.always),
       ),
-      home: const SessionListScreen(),
+      home: const LandingScreen(),
     );
   }
 }

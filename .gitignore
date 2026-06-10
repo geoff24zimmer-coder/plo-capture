@@ -10,3 +10,11 @@
 
 # Claude Code local settings
 .claude/
+
+# Secrets — never commit (public repo). token.txt holds a GitHub PAT.
+token.txt
+*.token
+
+# Source logo art lives in plo-app/assets + web/; keep the raw drop out of git.
+/PLO_SHOW_HH_LOGO.png
+
