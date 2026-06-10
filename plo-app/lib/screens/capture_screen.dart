@@ -210,6 +210,25 @@ class _CaptureScreenState extends State<CaptureScreen> {
     setState(() => _phase = _Phase.setup); // ready for the next one
   }
 
+  /// True while the hand is live AND the action has reached the hero — either
+  /// it's the hero's turn now, or the hero has already acted. Lets the user
+  /// bank a decision spot without playing the orbit out behind them.
+  bool get _canSaveSpot {
+    final e = _engine;
+    if (e == null || e.status != HandStatus.acting) return false;
+    final hero = _cfg!.heroSeat;
+    return e.whoseTurn() == hero || _applied.any((a) => a.seat == hero);
+  }
+
+  /// Save the hand as-is, mid-action. Partial info is first-class: no winner,
+  /// just the action up to this point and the hero's spot.
+  Future<void> _saveSpot() async {
+    await HandStore.instance.insertHand(_buildJson());
+    if (!mounted) return;
+    _toast('Spot saved');
+    setState(() => _phase = _Phase.setup);
+  }
+
   void _copyJson() {
     final pretty = const JsonEncoder.withIndent('  ').convert(_buildJson());
     Clipboard.setData(ClipboardData(text: pretty));
@@ -402,7 +421,34 @@ class _CaptureScreenState extends State<CaptureScreen> {
         const SizedBox(height: 10),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: _phase == _Phase.result ? _resultPanel() : _actionPanel(),
+          child: _phase == _Phase.result
+              ? _resultPanel()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_canSaveSpot) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _saveSpot,
+                          icon: const Icon(Icons.bookmark_add_outlined,
+                              size: 18),
+                          label: Text(
+                              _engine!.whoseTurn() == _cfg!.heroSeat
+                                  ? 'Save spot — your decision'
+                                  : 'Save spot here'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFEBCE7A),
+                            side: const BorderSide(color: Color(0xFFB8862F)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    _actionPanel(),
+                  ],
+                ),
         ),
       ],
     );
