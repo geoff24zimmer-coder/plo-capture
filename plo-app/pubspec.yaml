@@ -1,0 +1,26 @@
+name: plo_capture
+description: Live PLO hand capture - fast tap-based entry for cash and MTT.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.3.0
+  # Browser-backed SQLite (IndexedDB + sqlite3 wasm) so the same hand_store
+  # works when the app runs as a web PWA. Native builds still use sqflite.
+  sqflite_common_ffi_web: ^1.0.0
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.24.0
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

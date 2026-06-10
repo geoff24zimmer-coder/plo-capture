@@ -1,0 +1,64 @@
+name: Deploy web PWA to GitHub Pages
+
+# Build the Flutter web app and publish it to GitHub Pages on every push to
+# main. The result is an HTTPS site you can open on your phone and "Add to
+# Home Screen" to install as a PWA.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; newer pushes cancel in-flight ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plo-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+
+      # Keep the sqflite web worker + sqlite3 wasm in sync with the resolved
+      # package version (they're also committed, but this guards against drift).
+      - run: dart run sqflite_common_ffi_web:setup
+
+      - uses: actions/configure-pages@v5
+        with:
+          # Auto-enable Pages (source = GitHub Actions) on first run, so there's
+          # no manual repo-settings toggle.
+          enablement: true
+
+      # Project Pages serve under /<repo>/, so the app must be built with a
+      # matching base-href or asset paths 404.
+      - name: Build web
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: plo-app/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

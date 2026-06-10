@@ -1,0 +1,537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yourapp.com/schemas/plo-hand-history/v1.json",
+  "title": "PLO Live Hand History",
+  "description": "Canonical event-sourced record of a single live 4-card Pot Limit Omaha hand. Designed for fast mobile capture, partial information, straddle-heavy live games, and direct ingestion into solver pipelines. All monetary amounts are integers in the smallest currency unit (cents) or in chips for MTT.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "hand_id",
+    "session",
+    "table",
+    "players",
+    "hero",
+    "forced_bets",
+    "actions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Bump on breaking changes. Exporters key off this."
+    },
+    "hand_id": {
+      "type": "string",
+      "description": "UUID v7 recommended (time-sortable)."
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "session": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "game_type",
+        "variant"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "game_type": {
+          "enum": [
+            "cash",
+            "mtt"
+          ]
+        },
+        "variant": {
+          "const": "plo4",
+          "description": "4-card PLO only."
+        },
+        "venue": {
+          "type": "string"
+        },
+        "currency": {
+          "type": "string",
+          "default": "USD"
+        },
+        "stakes": {
+          "type": "object",
+          "description": "Cash only. Posted blinds in smallest currency unit.",
+          "properties": {
+            "sb": {
+              "type": "integer"
+            },
+            "bb": {
+              "type": "integer"
+            },
+            "mandatory_straddle": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "If the game runs a mandatory straddle, its amount."
+            }
+          }
+        },
+        "mtt": {
+          "type": "object",
+          "description": "MTT only.",
+          "properties": {
+            "tournament_name": {
+              "type": "string"
+            },
+            "buy_in": {
+              "type": "integer"
+            },
+            "level_number": {
+              "type": "integer"
+            },
+            "level": {
+              "type": "object",
+              "properties": {
+                "sb": {
+                  "type": "integer"
+                },
+                "bb": {
+                  "type": "integer"
+                },
+                "ante": {
+                  "type": "integer"
+                },
+                "ante_type": {
+                  "enum": [
+                    "bb_ante",
+                    "button_ante",
+                    "all_ante",
+                    "none"
+                  ]
+                }
+              }
+            },
+            "players_remaining": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "total_entries": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "in_the_money": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "bounty_format": {
+              "enum": [
+                "none",
+                "standard",
+                "progressive",
+                null
+              ]
+            }
+          }
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": [
+        "max_seats",
+        "button_seat"
+      ],
+      "properties": {
+        "max_seats": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 10
+        },
+        "button_seat": {
+          "type": "integer"
+        },
+        "straddle_action_rule": {
+          "enum": [
+            "utg_first_straddler_last",
+            "sb_first",
+            "none"
+          ],
+          "default": "utg_first_straddler_last",
+          "description": "House rule for preflop action order under a button straddle. Texas rooms vary: most open action UTG with the button straddler acting last; some open with the SB."
+        }
+      }
+    },
+    "players": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "seat",
+          "position",
+          "stack"
+        ],
+        "properties": {
+          "seat": {
+            "type": "integer",
+            "description": "Physical seat number, 1-indexed clockwise."
+          },
+          "position": {
+            "enum": [
+              "SB",
+              "BB",
+              "UTG",
+              "UTG1",
+              "UTG2",
+              "MP",
+              "LJ",
+              "HJ",
+              "CO",
+              "BTN",
+              "STRADDLE"
+            ],
+            "description": "Derived from button_seat at capture time; stored for query speed."
+          },
+          "stack": {
+            "type": "object",
+            "required": [
+              "amount"
+            ],
+            "properties": {
+              "amount": {
+                "type": "integer",
+                "description": "Stack at start of hand."
+              },
+              "is_approx": {
+                "type": "boolean",
+                "default": true,
+                "description": "Live reality: most villain stacks are estimates."
+              }
+            }
+          },
+          "is_hero": {
+            "type": "boolean",
+            "default": false
+          },
+          "player_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional stable ID linking the same villain across hands/sessions for population profiling."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Quick reads: 'lag', 'station', 'nit', 'straddler'."
+          }
+        }
+      }
+    },
+    "hero": {
+      "type": "object",
+      "required": [
+        "seat",
+        "cards"
+      ],
+      "properties": {
+        "seat": {
+          "type": "integer"
+        },
+        "cards": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/card"
+          },
+          "description": "Literal cards as dealt. Suit isomorphism is applied at the analysis layer, never at capture."
+        }
+      }
+    },
+    "forced_bets": {
+      "type": "array",
+      "description": "All money in before voluntary action: blinds, antes, straddles, dead/missed blinds. Order matters \u2014 it defines the preflop action sequence together with straddle_action_rule.",
+      "items": {
+        "type": "object",
+        "required": [
+          "seat",
+          "post_type",
+          "amount"
+        ],
+        "properties": {
+          "seat": {
+            "type": "integer"
+          },
+          "post_type": {
+            "enum": [
+              "sb",
+              "bb",
+              "ante",
+              "straddle_utg",
+              "straddle_utg2",
+              "straddle_button",
+              "straddle_mississippi",
+              "dead_blind",
+              "missed_blind"
+            ]
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "is_live": {
+            "type": "boolean",
+            "default": true,
+            "description": "Live posts grant last-action option; dead money does not."
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "The event stream \u2014 the heart of the record. Each hand is a path through the game tree.",
+      "items": {
+        "type": "object",
+        "required": [
+          "idx",
+          "street",
+          "seat",
+          "action"
+        ],
+        "properties": {
+          "idx": {
+            "type": "integer",
+            "description": "0-based global ordering across all streets."
+          },
+          "street": {
+            "enum": [
+              "preflop",
+              "flop",
+              "turn",
+              "river"
+            ]
+          },
+          "seat": {
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "fold",
+              "check",
+              "call",
+              "bet",
+              "raise"
+            ]
+          },
+          "amount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "RAISE-TO semantics: total amount the player's street commitment becomes, never the increment. Null for fold/check."
+          },
+          "is_all_in": {
+            "type": "boolean",
+            "default": false
+          },
+          "pot_before": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Derived cache: pot size before this action. Recomputable from the stream; stored for query speed and validation (legal pot-limit max = pot_before + 2 * amount_to_call + amount_to_call's caller commitment)."
+          },
+          "amount_to_call": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Derived cache: facing amount for this actor."
+          },
+          "timed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Optional tap timestamp; enables timing-tell notes and entry-speed analytics."
+          }
+        }
+      }
+    },
+    "board": {
+      "type": "object",
+      "properties": {
+        "flop": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/card"
+          }
+        },
+        "turn": {
+          "$ref": "#/$defs/card"
+        },
+        "river": {
+          "$ref": "#/$defs/card"
+        },
+        "runouts": {
+          "type": "array",
+          "description": "Run-it-twice (or more) support: each entry is a full alternate board.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "flop": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/card"
+                }
+              },
+              "turn": {
+                "$ref": "#/$defs/card"
+              },
+              "river": {
+                "$ref": "#/$defs/card"
+              }
+            }
+          }
+        }
+      }
+    },
+    "showdown": {
+      "type": "array",
+      "description": "Partial information is first-class. A villain flashing two of four cards is a 'partial' reveal.",
+      "items": {
+        "type": "object",
+        "required": [
+          "seat",
+          "reveal"
+        ],
+        "properties": {
+          "seat": {
+            "type": "integer"
+          },
+          "reveal": {
+            "enum": [
+              "full",
+              "partial",
+              "mucked_unseen"
+            ]
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/card"
+            },
+            "description": "Only the cards actually seen."
+          }
+        }
+      }
+    },
+    "results": {
+      "type": "object",
+      "properties": {
+        "pots": {
+          "type": "array",
+          "description": "Main pot plus side pots.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pot_type": {
+                "enum": [
+                  "main",
+                  "side"
+                ]
+              },
+              "amount": {
+                "type": "integer"
+              },
+              "winners": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "seat": {
+                      "type": "integer"
+                    },
+                    "amount_won": {
+                      "type": "integer"
+                    },
+                    "share_type": {
+                      "enum": [
+                        "full",
+                        "split",
+                        "hi",
+                        "lo"
+                      ],
+                      "default": "full"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "rake": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "jackpot_drop": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "hero_net": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Derived cache: hero profit/loss this hand including rake."
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "notes": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "marked_for_review": {
+          "type": "boolean",
+          "default": false
+        },
+        "capture_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "How long entry took \u2014 your UX north-star metric."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "card": {
+      "type": "string",
+      "pattern": "^[2-9TJQKA][shdc]$",
+      "description": "Rank then suit, e.g. 'As', 'Td', '9c'."
+    }
+  }
+}

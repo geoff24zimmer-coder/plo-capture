@@ -1,0 +1,12 @@
+# OS / editor junk
+.DS_Store
+*.swp
+*~
+
+# The Flutter app keeps its own .gitignore under plo-app/ (build artifacts,
+# .dart_tool, etc.). Generated web DB assets (web/sqflite_sw.js,
+# web/sqlite3.wasm) are intentionally committed so any checkout builds without
+# first running `dart run sqflite_common_ffi_web:setup`.
+
+# Claude Code local settings
+.claude/
