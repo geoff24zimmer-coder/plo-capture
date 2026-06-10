@@ -146,18 +146,14 @@ class SeatRing extends StatelessWidget {
                   ),
                 ),
               ),
-              // ---- flanking emblems (subtle circular watermark)
+              // ---- flanking emblems (logo floats on the felt; bg is transparent)
               for (final dx in const [-0.5, 0.5])
                 Align(
                   alignment: Alignment(dx, 0),
                   child: Opacity(
-                    opacity: 0.34,
-                    child: ClipOval(
-                      child: Image.asset('assets/emblem.png',
-                          width: tableW * 0.13,
-                          height: tableW * 0.13,
-                          fit: BoxFit.cover),
-                    ),
+                    opacity: 0.7,
+                    child: Image.asset('assets/emblem.png',
+                        width: tableW * 0.15),
                   ),
                 ),
               // ---- centre pot + SPR
