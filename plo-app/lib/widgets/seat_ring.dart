@@ -133,15 +133,20 @@ class SeatRing extends StatelessWidget {
                 alignment: const Alignment(0, 0),
                 child: _PotPill(pot: engine.pot, spr: _spr()),
               ),
-              // ---- bet pills (street commitment in front of each seat)
+              // ---- chips in front of each seat that has committed this street;
+              // they animate out from the seat so the recreation is visible.
               for (var k = 0; k < n; k++)
                 if (!engine.players[seats[k]]!.folded &&
                     engine.players[seats[k]]!.streetCommit > 0)
                   Align(
                     alignment: Alignment(
                         math.cos(theta(k)) * 0.66, math.sin(theta(k)) * 0.62),
-                    child: _BetPill(
-                        amount: engine.players[seats[k]]!.streetCommit),
+                    child: _BetChips(
+                      seat: seats[k],
+                      amount: engine.players[seats[k]]!.streetCommit,
+                      dirX: math.cos(theta(k)),
+                      dirY: math.sin(theta(k)),
+                    ),
                   ),
               // ---- dealer disk, just inside the rail at the button
               Align(
@@ -211,28 +216,97 @@ class _PotPill extends StatelessWidget {
   }
 }
 
-class _BetPill extends StatelessWidget {
+/// A small stack of poker chips + the amount, that slides out from the seat
+/// (and re-plays whenever the seat's commitment changes) so each preflop
+/// action is highly visible during capture and replay.
+class _BetChips extends StatelessWidget {
+  final int seat;
   final int amount;
-  const _BetPill({required this.amount});
+  final double dirX, dirY; // unit vector from centre toward the seat
+  const _BetChips({
+    required this.seat,
+    required this.amount,
+    required this.dirX,
+    required this.dirY,
+  });
+
+  static const _palette = [
+    Color(0xFFE6E6E6),
+    Color(0xFFD24B4A),
+    Color(0xFF2E8B57),
+    Color(0xFF3A7BD5),
+    Color(0xFF26262A),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(
-        color: const Color(0xE6121009),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: SeatRing._goldMid, width: 1),
+    final bb = tableBigBlind == 0 ? 1 : tableBigBlind;
+    final count = (amount / bb).round().clamp(1, 5);
+    return TweenAnimationBuilder<double>(
+      // A new key per (seat, amount) restarts the slide-in on every change.
+      key: ValueKey('bc-$seat-$amount'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      builder: (ctx, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(dirX * 24 * (1 - t), dirY * 24 * (1 - t)),
+          child: child,
+        ),
       ),
-      child: Text(
-        fmtAmt(amount),
-        style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: SeatRing._goldLt),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _stack(count),
+          const SizedBox(height: 3),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xE6121009),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: SeatRing._goldMid, width: 1),
+            ),
+            child: Text(fmtAmt(amount),
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: SeatRing._goldLt)),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _stack(int count) {
+    const step = 5.0;
+    return SizedBox(
+      width: 22,
+      height: 9 + step * (count - 1),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < count; i++)
+            Positioned(
+                bottom: i * step, child: _chip(_palette[i % _palette.length])),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(Color c) => Container(
+        width: 22,
+        height: 9,
+        decoration: BoxDecoration(
+          color: c,
+          borderRadius: BorderRadius.circular(4.5),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.82), width: 1),
+          boxShadow: const [
+            BoxShadow(color: Colors.black54, blurRadius: 1.5, offset: Offset(0, 1)),
+          ],
+        ),
+      );
 }
 
 class _DealerDisk extends StatelessWidget {
