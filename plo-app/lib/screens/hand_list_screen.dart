@@ -69,7 +69,7 @@ class _HandListScreenState extends State<HandListScreen> {
               return ListTile(
                 leading: isSpot
                     ? const Icon(Icons.bookmark,
-                        color: Color(0xFFEBCE7A), size: 20)
+                        color: Color(0xFFF0C75A), size: 20)
                     : marked
                         ? const Icon(Icons.flag,
                             color: Color(0xFFEF9F27), size: 20)
@@ -77,7 +77,7 @@ class _HandListScreenState extends State<HandListScreen> {
                 title: isSpot
                     ? const Text('Decision spot',
                         style: TextStyle(
-                            color: Color(0xFFEBCE7A),
+                            color: Color(0xFFF0C75A),
                             fontWeight: FontWeight.w600))
                     : Text(pot != null ? 'Pot ${money(pot)}' : 'Hand'),
                 subtitle: Text(

@@ -436,7 +436,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFFEBCE7A))),
+                      color: Color(0xFFF0C75A))),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -485,8 +485,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
                                   ? 'Save spot — your decision'
                                   : 'Save spot here'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFEBCE7A),
-                            side: const BorderSide(color: Color(0xFFB8862F)),
+                            foregroundColor: const Color(0xFFF0C75A),
+                            side: const BorderSide(color: Color(0xFFC9A536)),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),

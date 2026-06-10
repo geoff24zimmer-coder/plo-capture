@@ -21,8 +21,10 @@ class ActionBar extends StatelessWidget {
     required this.currentBet,
   });
 
+  // TODO: extract to shared theme tokens (mirrors Monker Killer solver)
   static const _red = Color(0xFFE24B4A);
-  static const _green = Color(0xFF1D9E75);
+  static const _emerald = Color(0xFF10B981); // CALL — EV-positive accent
+  static const _lime = Color(0xFF7FE000); // POT — aggressive-action signature
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +50,8 @@ class ActionBar extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
+                  foregroundColor: _emerald,
+                  side: const BorderSide(color: _emerald),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 onPressed: () => onAction(
@@ -92,7 +96,8 @@ class ActionBar extends StatelessWidget {
       flex: 2,
       child: FilledButton(
         style: FilledButton.styleFrom(
-          backgroundColor: _green,
+          backgroundColor: _lime,
+          foregroundColor: const Color(0xFF0C0F0E), // dark ink on electric lime
           padding: const EdgeInsets.symmetric(vertical: 12),
         ),
         onPressed: () => onAction(act, amount: pot),
@@ -102,7 +107,7 @@ class ActionBar extends StatelessWidget {
             const Text('POT',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
             Text(fmtAmt(pot),
-                style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                style: const TextStyle(fontSize: 12, color: Color(0xCC0C0F0E))),
           ],
         ),
       ),

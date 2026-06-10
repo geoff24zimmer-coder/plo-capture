@@ -39,11 +39,11 @@ class SeatRing extends StatelessWidget {
     this.onSeatTap,
   });
 
-  // palette
-  static const _goldLt = Color(0xFFEBCE7A);
-  static const _goldMid = Color(0xFFB8862F);
+  // palette — TODO: extract to shared theme tokens (mirrors Monker Killer solver)
+  static const _goldLt = Color(0xFFF0C75A);
+  static const _goldMid = Color(0xFFC9A536);
   static const _goldDk = Color(0xFF5E441C);
-  static const _teal = Color(0xFF21D6A6);
+  static const _teal = Color(0xFF10B981); // actor / EV-positive accent (emerald)
   static const _feltCtr = Color(0xFF2C7A52);
   static const _feltEdge = Color(0xFF123E2A);
   static const _seatFill = Color(0xFF16181B);
@@ -279,7 +279,7 @@ class _BetChips extends StatelessWidget {
       // A new key per (seat, amount) restarts the slide-in on every change.
       key: ValueKey('bc-$seat-$amount'),
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 200), // snappier, matches solver
       curve: Curves.easeOutCubic,
       builder: (ctx, t, child) => Opacity(
         opacity: t.clamp(0.0, 1.0),

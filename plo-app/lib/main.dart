@@ -27,7 +27,7 @@ class PloCaptureApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1D9E75),
+          seedColor: const Color(0xFF10B981), // emerald accent (mirrors solver)
           brightness: Brightness.dark,
           surface: const Color(0xFF151917),
         ),

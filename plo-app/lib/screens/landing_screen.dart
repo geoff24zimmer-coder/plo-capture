@@ -34,14 +34,14 @@ class LandingScreen extends StatelessWidget {
               _StartButton(
                 label: 'Cash Game',
                 icon: Icons.payments_outlined,
-                color: const Color(0xFF1D9E75),
+                color: const Color(0xFF10B981),
                 onTap: () => _start(context, 'cash'),
               ),
               const SizedBox(height: 14),
               _StartButton(
                 label: 'Tournament',
                 icon: Icons.emoji_events_outlined,
-                color: const Color(0xFFB8862F),
+                color: const Color(0xFFC9A536),
                 onTap: () => _start(context, 'mtt'),
               ),
               const SizedBox(height: 6),
