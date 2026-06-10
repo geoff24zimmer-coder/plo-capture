@@ -28,30 +28,36 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="PLO Capture">
+  <meta name="apple-mobile-web-app-title" content="PLO Show HH">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>PLO Capture</title>
+  <title>The PLO Show: Hand History</title>
   <link rel="manifest" href="manifest.json">
 
   <style>
     /* Dark splash that matches the app's scaffold colour, so the screen is
        never white while Flutter boots (especially noticeable as an installed
        PWA on a cold start). Removed automatically once Flutter takes over. */
-    html, body { margin: 0; padding: 0; background-color: #0C0F0E; }
+    html, body { margin: 0; padding: 0; background-color: #000; }
     #boot {
       position: fixed; inset: 0; display: flex; align-items: center;
-      justify-content: center; background-color: #0C0F0E;
-      color: #1D9E75; font-family: -apple-system, system-ui, sans-serif;
-      font-size: 15px; letter-spacing: 1.5px;
+      justify-content: center; background-color: #000;
+    }
+    #boot img {
+      width: min(72vw, 360px); height: auto;
+      animation: bootpulse 1.8s ease-in-out infinite;
+    }
+    @keyframes bootpulse {
+      0%, 100% { opacity: 0.78; }
+      50% { opacity: 1; }
     }
   </style>
 </head>
 <body>
-  <div id="boot">PLO CAPTURE</div>
+  <div id="boot"><img src="logo.png" alt="The PLO Show — Hand History"></div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
