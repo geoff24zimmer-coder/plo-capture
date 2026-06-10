@@ -15,6 +15,8 @@ dependencies:
   # works when the app runs as a web PWA. Native builds still use sqflite.
   sqflite_common_ffi_web: ^1.0.0
   path: ^1.9.0
+  archive: ^4.0.9
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

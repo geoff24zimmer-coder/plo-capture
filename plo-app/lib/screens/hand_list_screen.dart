@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
+import '../export/download_web.dart';
+import '../export/solver_export.dart';
 import '../models/session.dart';
 import '../util.dart';
 import 'capture_screen.dart';
@@ -25,12 +27,89 @@ class _HandListScreenState extends State<HandListScreen> {
   void _refresh() => setState(
       () => _future = HandStore.instance.handsForSession(widget.session.id));
 
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
+  Future<void> _exportForSolver() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final hands =
+        await HandStore.instance.handJsonsForSession(widget.session.id);
+    if (hands.isEmpty) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('No hands to export yet.')));
+      return;
+    }
+    final now = DateTime.now();
+    final date = '${now.year}-${_two(now.month)}-${_two(now.day)}';
+    final bundle = exportPopulation(hands, capturedThrough: date);
+    final venue =
+        widget.session.venue.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+    downloadZip('population_${venue}_$date.zip', bundle.files);
+    if (!mounted) return;
+    await _showExportSummary(bundle);
+  }
+
+  Future<void> _showExportSummary(SolverBundle b) async {
+    String label(RefusalReason r) => switch (r) {
+          RefusalReason.limp => 'Limped pots (no-limp trees)',
+          RefusalReason.raiseCapExceeded => 'Past the 5-bet cap',
+          RefusalReason.offBandStack => 'Off-band stack depth',
+          RefusalReason.offBandStraddle => 'Off-band straddle size',
+          RefusalReason.noHeroAction => 'Hero never acted',
+          RefusalReason.illegalReplay => 'Could not replay',
+        };
+    final refused = b.refusals.entries.where((e) => e.value > 0).toList();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Solver export'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${b.acceptedHands} of ${b.totalHands} hands placed '
+              'across ${b.manifest['node_count']} nodes.',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if (refused.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text('Dropped (${b.totalHands - b.acceptedHands}):',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white.withValues(alpha: 0.7))),
+              const SizedBox(height: 4),
+              for (final e in refused)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text('${e.value} · ${label(e.key)}',
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7))),
+                ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.session;
     return Scaffold(
-      appBar:
-          AppBar(title: Text('${s.stakesLabel} · ${s.venue}')),
+      appBar: AppBar(
+        title: Text('${s.stakesLabel} · ${s.venue}'),
+        actions: [
+          IconButton(
+            tooltip: 'Export for solver',
+            icon: const Icon(Icons.ios_share),
+            onPressed: _exportForSolver,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.push(

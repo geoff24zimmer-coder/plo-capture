@@ -126,6 +126,17 @@ class HandStore {
     );
   }
 
+  /// Every hand's full canonical JSON for a session — used by the solver export.
+  Future<List<Map<String, dynamic>>> handJsonsForSession(
+      String sessionId) async {
+    final rows = await (await db).query('hands',
+        columns: ['json'], where: 'session_id = ?', whereArgs: [sessionId]);
+    return [
+      for (final r in rows)
+        jsonDecode(r['json'] as String) as Map<String, dynamic>
+    ];
+  }
+
   Future<Map<String, dynamic>> getHand(String handId) async {
     final rows = await (await db)
         .query('hands', columns: ['json'], where: 'hand_id = ?', whereArgs: [handId]);
