@@ -411,7 +411,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget _actionPanel() {
     final e = _engine!;
     if (e.whoseTurn() == null) return const SizedBox.shrink();
-    return ActionBar(la: e.legalActions(), onAction: _onAction);
+    return ActionBar(
+      la: e.legalActions(),
+      onAction: _onAction,
+      isMtt: _isMtt,
+      currentBet: e.currentBet,
+    );
   }
 
   Widget _resultPanel() {
