@@ -30,11 +30,13 @@ class SeatRing extends StatelessWidget {
   final HandEngine engine;
   final int heroSeat;
   final Map<int, String> positions;
+  final void Function(int seat)? onSeatTap; // set: seats become tappable
   const SeatRing({
     super.key,
     required this.engine,
     required this.heroSeat,
     required this.positions,
+    this.onSeatTap,
   });
 
   // palette
@@ -189,12 +191,17 @@ class SeatRing extends StatelessWidget {
                 Positioned(
                   left: seatPts[k].dx - seatD / 2,
                   top: seatPts[k].dy - seatD / 2,
-                  child: _SeatBadge(
-                    diameter: seatD,
-                    player: engine.players[seats[k]]!,
-                    label: positions[seats[k]] ?? '?',
-                    isHero: seats[k] == heroSeat,
-                    isActor: seats[k] == actor,
+                  child: GestureDetector(
+                    onTap: onSeatTap == null
+                        ? null
+                        : () => onSeatTap!(seats[k]),
+                    child: _SeatBadge(
+                      diameter: seatD,
+                      player: engine.players[seats[k]]!,
+                      label: positions[seats[k]] ?? '?',
+                      isHero: seats[k] == heroSeat,
+                      isActor: seats[k] == actor,
+                    ),
                   ),
                 ),
             ],

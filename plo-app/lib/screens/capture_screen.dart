@@ -10,7 +10,7 @@ import '../widgets/seat_ring.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/card_picker.dart';
 
-enum _Phase { setup, acting, result }
+enum _Phase { setup, seats, acting, result }
 
 enum _StraddleChoice { none, utg, button }
 
@@ -46,8 +46,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
     chipMode = _isMtt;
   }
   late int _nPlayers = widget.session.maxSeats;
-  int _buttonSeat = 1;
-  int _heroSeat = 3;
+  int _buttonSeat = 1; // chosen by tapping the ring on the seat-select step
+  static const int _heroSeat = 1; // hero is always "you", anchored bottom
   _StraddleChoice _straddle = _StraddleChoice.none;
   StraddleActionRule _rule = StraddleActionRule.utgFirstStraddlerLast;
   bool _markedForReview = false;
@@ -76,7 +76,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   // ------------------------------------------------------------- actions
 
-  Future<void> _deal() async {
+  /// Build the hand config from the current form + chosen button. Used both to
+  /// render the live seat-select preview and to start the hand on deal.
+  HandConfig _buildConfig() {
     final sb = _amount(_sbCtrl, _isMtt ? 100 : 2);
     final bb = _amount(_bbCtrl, _isMtt ? 200 : 5);
     final stack = _amount(_stackCtrl, _isMtt ? 20000 : 500);
@@ -99,7 +101,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
         ForcedBet(_buttonSeat, PostType.straddleButton, bb * 2),
     ];
 
-    final cfg = HandConfig(
+    return HandConfig(
       initialStacks: {for (final s in seats) s: stack},
       buttonSeat: _buttonSeat,
       smallBlind: sb,
@@ -116,16 +118,27 @@ class _CaptureScreenState extends State<CaptureScreen> {
               ante: ante,
             )
           : null,
-      playersRemaining:
-          _isMtt ? int.tryParse(_playersCtrl.text) : null,
+      playersRemaining: _isMtt ? int.tryParse(_playersCtrl.text) : null,
     );
+  }
 
+  /// Move from the form to the visual seat-select step.
+  void _continueToSeats() {
+    if (_buttonSeat > _nPlayers) _buttonSeat = 1;
+    setState(() {
+      tableBigBlind = _amount(_bbCtrl, _isMtt ? 200 : 5);
+      _phase = _Phase.seats;
+    });
+  }
+
+  Future<void> _deal() async {
+    final cfg = _buildConfig();
     final cards = await pickCards(context,
         count: 4, excluded: {}, title: 'Hero cards');
     if (cards == null) return;
-
+    final seats = List.generate(_nPlayers, (i) => i + 1);
     setState(() {
-      tableBigBlind = bb; // for BB display + SPR on the table
+      tableBigBlind = cfg.bigBlind; // for BB display + SPR on the table
       _cfg = cfg;
       _engine = cfg.buildEngine();
       _positions = positionNames(seats, _buttonSeat);
@@ -245,11 +258,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_phase == _Phase.setup
-            ? 'New hand'
-            : '${widget.session.stakesLabel} · ${_nPlayers}-max'),
+        leading: _phase == _Phase.seats
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => setState(() => _phase = _Phase.setup),
+              )
+            : null,
+        title: Text(switch (_phase) {
+          _Phase.setup => 'New hand',
+          _Phase.seats => 'Where are you sitting?',
+          _ => '${widget.session.stakesLabel} · ${_nPlayers}-max',
+        }),
         actions: [
-          if (_phase != _Phase.setup)
+          if (_phase == _Phase.acting || _phase == _Phase.result) ...[
             TextButton(
               onPressed: () => setState(() => tableUnit =
                   tableUnit == TableUnit.money ? TableUnit.bb : TableUnit.money),
@@ -257,17 +278,18 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   style: const TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w700)),
             ),
-          if (_phase != _Phase.setup)
             IconButton(
               tooltip: 'Undo last action',
               icon: const Icon(Icons.undo),
               onPressed: _applied.isEmpty ? null : _undo,
             ),
+          ],
         ],
       ),
       body: SafeArea(
         child: switch (_phase) {
           _Phase.setup => _buildSetup(),
+          _Phase.seats => _buildSeatSelect(),
           _ => _buildTable(),
         },
       ),
@@ -275,7 +297,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Widget _buildSetup() {
-    final seats = List.generate(_nPlayers, (i) => i + 1);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -337,38 +358,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
           onChanged: (v) => setState(() {
             _nPlayers = v.round();
             if (_buttonSeat > _nPlayers) _buttonSeat = 1;
-            if (_heroSeat > _nPlayers) _heroSeat = _nPlayers;
             // UTG straddle is meaningless below 4-handed; drop a stale pick.
             if (_nPlayers < 4 && _straddle == _StraddleChoice.utg) {
               _straddle = _StraddleChoice.none;
             }
           }),
         ),
-        Row(children: [
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              value: _buttonSeat,
-              decoration: const InputDecoration(labelText: 'Button seat'),
-              items: [
-                for (final s in seats)
-                  DropdownMenuItem(value: s, child: Text('Seat $s'))
-              ],
-              onChanged: (v) => setState(() => _buttonSeat = v!),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              value: _heroSeat,
-              decoration: const InputDecoration(labelText: 'Hero seat'),
-              items: [
-                for (final s in seats)
-                  DropdownMenuItem(value: s, child: Text('Seat $s'))
-              ],
-              onChanged: (v) => setState(() => _heroSeat = v!),
-            ),
-          ),
-        ]),
         const SizedBox(height: 16),
         if (!_isMtt)
         Wrap(spacing: 8, children: [
@@ -402,8 +397,59 @@ class _CaptureScreenState extends State<CaptureScreen> {
         FilledButton(
           style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16)),
-          onPressed: _deal,
-          child: const Text('Deal hand', style: TextStyle(fontSize: 16)),
+          onPressed: _continueToSeats,
+          child: const Text('Continue', style: TextStyle(fontSize: 16)),
+        ),
+      ],
+    );
+  }
+
+  /// Visual seat selection: tap the seat with the dealer button; the hero
+  /// (always you, anchored at the bottom) picks up the derived position.
+  Widget _buildSeatSelect() {
+    final seats = List.generate(_nPlayers, (i) => i + 1);
+    final cfg = _buildConfig();
+    final positions = positionNames(seats, _buttonSeat);
+    final heroPos = positions[_heroSeat] ?? '?';
+    return Column(
+      children: [
+        Expanded(
+          child: SeatRing(
+            engine: cfg.buildEngine(),
+            heroSeat: _heroSeat,
+            positions: positions,
+            onSeatTap: (s) => setState(() => _buttonSeat = s),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Tap the seat with the dealer button',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.7))),
+              const SizedBox(height: 4),
+              Text("You're in the $heroPos",
+                  style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFEBCE7A))),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16)),
+                  onPressed: _deal,
+                  child:
+                      const Text('Deal hand', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
