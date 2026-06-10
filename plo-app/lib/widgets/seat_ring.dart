@@ -31,12 +31,17 @@ class SeatRing extends StatelessWidget {
   final int heroSeat;
   final Map<int, String> positions;
   final void Function(int seat)? onSeatTap; // set: seats become tappable
+  // Seat-select mode: the engine has blinds posted, but this isn't a live hand
+  // yet, so suppress the pot pill, bet chips, and the first-actor glow — show
+  // only seats, positions, and the dealer disk.
+  final bool selecting;
   const SeatRing({
     super.key,
     required this.engine,
     required this.heroSeat,
     required this.positions,
     this.onSeatTap,
+    this.selecting = false,
   });
 
   // palette — TODO: extract to shared theme tokens (mirrors Monker Killer solver)
@@ -64,7 +69,7 @@ class SeatRing extends StatelessWidget {
     final seats = engine.players.keys.toList()..sort();
     final n = seats.length;
     final heroIdx = seats.indexOf(heroSeat);
-    final actor = engine.whoseTurn();
+    final actor = selecting ? null : engine.whoseTurn();
     final btnIdx = seats.indexOf(engine.buttonSeat);
 
     double theta(int k) => math.pi / 2 + (k - heroIdx) * 2 * math.pi / n;
@@ -156,16 +161,18 @@ class SeatRing extends StatelessWidget {
                         width: tableW * 0.15),
                   ),
                 ),
-              // ---- centre pot + SPR
-              Align(
-                alignment: const Alignment(0, 0),
-                child: _PotPill(pot: engine.pot, spr: _spr()),
-              ),
+              // ---- centre pot + SPR (hidden until the hand is live)
+              if (!selecting)
+                Align(
+                  alignment: const Alignment(0, 0),
+                  child: _PotPill(pot: engine.pot, spr: _spr()),
+                ),
               // ---- chips in front of each seat that has committed this street;
               // they animate out from the seat so the recreation is visible.
-              for (var k = 0; k < n; k++)
-                if (!engine.players[seats[k]]!.folded &&
-                    engine.players[seats[k]]!.streetCommit > 0)
+              if (!selecting)
+                for (var k = 0; k < n; k++)
+                  if (!engine.players[seats[k]]!.folded &&
+                      engine.players[seats[k]]!.streetCommit > 0)
                   Align(
                     alignment: Alignment(
                         math.cos(theta(k)) * 0.66, math.sin(theta(k)) * 0.62),

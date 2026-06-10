@@ -132,6 +132,34 @@ class _CaptureScreenState extends State<CaptureScreen> {
     });
   }
 
+  /// Seat-select model: the hero is fixed at the bottom and the user states
+  /// THEIR OWN position. Positions are a pure rotation of the button, so we
+  /// realise a hero position by moving the button under the hood — the dealer
+  /// puck hops around the ring while "you" stay put.
+
+  /// Step the hero's position one notch (BTN→SB→BB→… for dir=+1).
+  void _cycleHero(int dir) {
+    final seats = List.generate(_nPlayers, (i) => i + 1);
+    final bi = seats.indexOf(_buttonSeat);
+    final nbi = ((bi - dir) % _nPlayers + _nPlayers) % _nPlayers;
+    HapticFeedback.selectionClick();
+    setState(() => _buttonSeat = seats[nbi]);
+  }
+
+  /// Adopt the tapped seat's current position as the hero's — "I'm sitting in
+  /// that spot." Tapping your own (bottom) seat is a no-op.
+  void _sitAt(int tappedSeat) {
+    final seats = List.generate(_nPlayers, (i) => i + 1);
+    final heroIdx = seats.indexOf(_heroSeat);
+    final tappedIdx = seats.indexOf(tappedSeat);
+    final btnIdx = seats.indexOf(_buttonSeat);
+    final n = _nPlayers;
+    final newBtnIdx = ((heroIdx - tappedIdx + btnIdx) % n + n) % n;
+    if (newBtnIdx == btnIdx) return;
+    HapticFeedback.selectionClick();
+    setState(() => _buttonSeat = seats[newBtnIdx]);
+  }
+
   Future<void> _deal() async {
     final cfg = _buildConfig();
     final cards = await pickCards(context,
@@ -404,7 +432,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
             engine: cfg.buildEngine(),
             heroSeat: _heroSeat,
             positions: positions,
-            onSeatTap: (s) => setState(() => _buttonSeat = s),
+            selecting: true,
+            onSeatTap: _sitAt,
           ),
         ),
         Padding(
@@ -412,18 +441,50 @@ class _CaptureScreenState extends State<CaptureScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Tap the seat with the dealer button',
+              Text('Tap the seat you’re in, or step with the arrows',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.7))),
-              const SizedBox(height: 4),
-              Text("You're in the $heroPos",
-                  style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFFF0C75A))),
-              const SizedBox(height: 12),
+                      fontSize: 12.5,
+                      color: Colors.white.withValues(alpha: 0.6))),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _posChevron(Icons.chevron_left, () => _cycleHero(-1)),
+                  const SizedBox(width: 14),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 138),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161A18),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: const Color(0xFFC9A536), width: 1.4),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('YOU’RE IN',
+                            style: TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 1.6,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white54)),
+                        Text(heroPos,
+                            style: const TextStyle(
+                                fontSize: 26,
+                                height: 1.1,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFFF0C75A))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  _posChevron(Icons.chevron_right, () => _cycleHero(1)),
+                ],
+              ),
+              const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -440,6 +501,20 @@ class _CaptureScreenState extends State<CaptureScreen> {
       ],
     );
   }
+
+  /// Round tappable chevron for the position stepper.
+  Widget _posChevron(IconData icon, VoidCallback onTap) => Material(
+        color: const Color(0xFF1E2421),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: Icon(icon, size: 28, color: const Color(0xFFF0C75A)),
+          ),
+        ),
+      );
 
   Widget _buildTable() {
     final e = _engine!;
