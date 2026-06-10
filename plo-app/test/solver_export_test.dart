@@ -223,6 +223,30 @@ void main() {
       expect(node['n_hands'], 2);
     });
 
+    test('a lone short villain still in does not sink a deep spot', () {
+      // Hero 100bb; a short 40bb villain (SB) is still in behind, everyone
+      // else 100bb. Depth = min(hero, LARGEST still-in villain) = 100bb, so
+      // this must be ACCEPTED — taking the smallest villain would wrongly
+      // refuse it at 40bb.
+      final stacks = {for (var s = 1; s <= 8; s++) s: 50000};
+      stacks[2] = 20000; // SB is short
+      final hand = makeHand(
+        stacks: stacks,
+        buttonSeat: 1,
+        sb: 200,
+        bb: 500,
+        heroSeat: 8,
+        forced: const [ForcedBet(2, PostType.sb, 200), ForcedBet(3, PostType.bb, 500)],
+        positions: _noStrPos,
+        heroCards: const ['Ah', 'As', 'Kh', 'Qd'],
+        actions: _foldsThenHeroOpen(heroAct: ActionType.raise, heroAmount: 1500),
+      );
+
+      final b = exportPopulation([hand], capturedThrough: '2026-06-10');
+      expect(b.acceptedHands, 1);
+      expect((b.manifest['nodes'] as List).first['depth_band'], 'faithful');
+    });
+
     test('a hand that never reaches the hero is dropped', () {
       // Folds around to the BTN who opens; HERO (CO) already folded earlier is
       // not possible here, so instead end the hand before CO acts.

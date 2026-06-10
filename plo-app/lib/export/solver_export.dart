@@ -275,15 +275,27 @@ _Outcome _placeHand(Map<String, dynamic> j) {
       break;
   }
 
-  // Effective depth at the node (chips remaining), straddle-corrected to bb.
-  var effStack = e.players[heroSeat]!.stack;
-  var effIsApprox = false; // hero stack is exact
+  // Effective depth = min(hero, LARGEST still-in villain), on STARTING stacks,
+  // straddle-corrected to bb (§7). Fold status is read at the node; a lone
+  // short villain must not sink an otherwise-deep spot, so we take the largest
+  // villain still in, not the smallest. Hero's stack is exact; villains' are
+  // approximate, so the band-defining stack is "approx" only when a villain binds.
+  final stacks = cfg.initialStacks;
+  final heroStack = stacks[heroSeat] ?? e.players[heroSeat]!.stack;
+  var maxVillain = -1;
   for (final p in e.players.values) {
     if (p.seat == heroSeat || p.folded) continue;
-    if (p.stack < effStack) {
-      effStack = p.stack;
-      effIsApprox = true; // villain stacks are approximate
-    }
+    final s = stacks[p.seat] ?? p.stack;
+    if (s > maxVillain) maxVillain = s;
+  }
+  final int effStack;
+  final bool effIsApprox;
+  if (maxVillain < 0 || heroStack <= maxVillain) {
+    effStack = heroStack; // hero binds (or nobody left) → exact
+    effIsApprox = false;
+  } else {
+    effStack = maxVillain; // largest villain binds → approximate
+    effIsApprox = true;
   }
   final correction = straddleRatio != null ? 2.0 / straddleRatio : 1.0;
   final depthBb = effStack / bb * correction;
