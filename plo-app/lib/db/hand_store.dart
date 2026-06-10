@@ -56,6 +56,16 @@ class HandStore {
   Future<void> createSession(Session s) async =>
       (await db).insert('sessions', s.toRow());
 
+  /// Delete a session and all of its hands. SQLite foreign keys aren't
+  /// enforced here, so cascade explicitly; one transaction keeps it atomic.
+  Future<void> deleteSession(String id) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete('hands', where: 'session_id = ?', whereArgs: [id]);
+      await txn.delete('sessions', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
   /// Sessions newest-first, each with hand count and running hero net.
   Future<List<({Session session, int handCount, int net})>>
       listSessions() async {

@@ -84,6 +84,7 @@ class _SessionListScreenState extends State<SessionListScreen> {
                   );
                   _refresh();
                 },
+                onLongPress: () => _confirmDelete(s, r.handCount),
               );
             },
           );
@@ -94,6 +95,41 @@ class _SessionListScreenState extends State<SessionListScreen> {
 
   String _dateLabel(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _confirmDelete(Session s, int handCount) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete session?'),
+        content: Text(handCount == 0
+            ? 'Delete “${s.stakesLabel} · ${s.venue}”?'
+            : 'Delete “${s.stakesLabel} · ${s.venue}” and its '
+                '$handCount hand${handCount == 1 ? '' : 's'}? '
+                'This can’t be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE24B4A)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true) {
+      await HandStore.instance.deleteSession(s.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Session deleted'),
+            duration: Duration(seconds: 2)),
+      );
+      _refresh();
+    }
+  }
 
   Future<void> _newSession() async {
     final sbCtrl = TextEditingController(text: '2');
