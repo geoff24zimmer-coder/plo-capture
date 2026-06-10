@@ -3,6 +3,25 @@ import 'package:flutter/material.dart';
 import '../plo_engine.dart';
 import '../util.dart';
 
+/// Point on a stadium (rounded-rect with semicircular caps of radius == [hh])
+/// at parametric angle [t], in pixel coords. Seats ride this curve so they all
+/// sit ON the gold rail of the wide table — an ellipse would cut the corners.
+Offset _stadiumPoint(double t, double cx, double cy, double hw, double hh) {
+  final dx = math.cos(t), dy = math.sin(t);
+  final straight = (hw - hh).clamp(0.0, hw); // half-length of the flat top/bottom
+  final sx = dx.abs() < 1e-6 ? double.infinity : hw / dx.abs();
+  final sy = dy.abs() < 1e-6 ? double.infinity : hh / dy.abs();
+  var s = math.min(sx, sy); // rectangle boundary
+  if ((dx * s).abs() > straight) {
+    // in a cap: intersect the ray with the cap circle at (±straight, 0), r = hh
+    final c = (dx < 0 ? -1.0 : 1.0) * straight;
+    final b = dx * c;
+    final disc = b * b - (c * c - hh * hh);
+    if (disc >= 0) s = b + math.sqrt(disc);
+  }
+  return Offset(cx + dx * s, cy + dy * s);
+}
+
 /// The signature element: a solver-style table — brass rail, radial-green felt,
 /// circular seat badges, a white dealer disk at the button, a clearly-marked
 /// hero seat, live pot + SPR in the centre, and PLO Show emblems flanking it.
@@ -53,8 +72,19 @@ class SeatRing extends StatelessWidget {
         aspectRatio: 1.9,
         child: LayoutBuilder(builder: (ctx, c) {
           final tableW = c.maxWidth;
-          final seatD = (tableW * 0.115).clamp(40.0, 60.0);
+          final tableH = c.maxHeight;
+          final seatD = (tableW * 0.092).clamp(32.0, 48.0);
           final btnTh = theta(btnIdx);
+          // Rail-band centre radii (between the felt edge and the rail's outer
+          // edge), in px — seats are centred here so they straddle the gold.
+          final cx = tableW / 2, cy = tableH / 2;
+          final bandHw = tableW * 0.465, bandHh = tableH * 0.44;
+          final seatPts = [
+            for (var k = 0; k < n; k++)
+              _stadiumPoint(theta(k), cx, cy, bandHw, bandHh)
+          ];
+          final btnPt = _stadiumPoint(btnTh, cx, cy, bandHw, bandHh);
+          final dealerPt = Offset.lerp(Offset(cx, cy), btnPt, 0.80)!;
 
           return Stack(
             clipBehavior: Clip.none,
@@ -148,17 +178,17 @@ class SeatRing extends StatelessWidget {
                       dirY: math.sin(theta(k)),
                     ),
                   ),
-              // ---- dealer disk, just inside the rail at the button
-              Align(
-                alignment:
-                    Alignment(math.cos(btnTh) * 0.66, math.sin(btnTh) * 0.62),
+              // ---- dealer disk, just inside the rail in front of the button
+              Positioned(
+                left: dealerPt.dx - seatD * 0.21,
+                top: dealerPt.dy - seatD * 0.21,
                 child: _DealerDisk(d: seatD * 0.42),
               ),
-              // ---- seats
+              // ---- seats, centred on the rail band
               for (var k = 0; k < n; k++)
-                Align(
-                  alignment: Alignment(
-                      math.cos(theta(k)) * 0.96, math.sin(theta(k)) * 0.92),
+                Positioned(
+                  left: seatPts[k].dx - seatD / 2,
+                  top: seatPts[k].dy - seatD / 2,
                   child: _SeatBadge(
                     diameter: seatD,
                     player: engine.players[seats[k]]!,
