@@ -187,7 +187,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     });
   }
 
-  Map<String, dynamic> _buildJson() => buildHandJson(
+  Map<String, dynamic> _buildJson({bool complete = true}) => buildHandJson(
         engine: _engine!,
         cfg: _cfg!,
         positions: _positions,
@@ -198,6 +198,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
         winnerSeat: _winnerSeat,
         sessionId: widget.session.id,
         markedForReview: _markedForReview,
+        complete: complete,
         captureSeconds: _dealTime == null
             ? null
             : DateTime.now().difference(_dealTime!).inMilliseconds / 1000.0,
@@ -223,7 +224,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// Save the hand as-is, mid-action. Partial info is first-class: no winner,
   /// just the action up to this point and the hero's spot.
   Future<void> _saveSpot() async {
-    await HandStore.instance.insertHand(_buildJson());
+    await HandStore.instance.insertHand(_buildJson(complete: false));
     if (!mounted) return;
     _toast('Spot saved');
     setState(() => _phase = _Phase.setup);

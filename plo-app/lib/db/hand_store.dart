@@ -20,7 +20,14 @@ class HandStore {
         : p.join(await getDatabasesPath(), 'plo_capture.db');
     _db ??= await openDatabase(
       path,
-      version: 1,
+      version: 2,
+      onUpgrade: (d, oldV, newV) async {
+        // v2: tag decision spots (hands saved mid-action) for the hand list.
+        if (oldV < 2) {
+          await d.execute(
+              'ALTER TABLE hands ADD COLUMN is_spot INTEGER NOT NULL DEFAULT 0');
+        }
+      },
       onCreate: (d, v) async {
         await d.execute('''
           CREATE TABLE sessions (
@@ -41,6 +48,7 @@ class HandStore {
             hero_net INTEGER,
             pot INTEGER,
             marked INTEGER NOT NULL DEFAULT 0,
+            is_spot INTEGER NOT NULL DEFAULT 0,
             json TEXT NOT NULL
           )
         ''');
@@ -100,6 +108,8 @@ class HandStore {
       'pot': pots.isNotEmpty ? pots.first['amount'] : null,
       'marked':
           (handJson['meta']?['marked_for_review'] as bool? ?? false) ? 1 : 0,
+      // The JSON is authoritative; this column just mirrors it for list queries.
+      'is_spot': (handJson['meta']?['complete'] == false) ? 1 : 0,
       'json': jsonEncode(handJson),
     });
   }
@@ -107,7 +117,9 @@ class HandStore {
   Future<List<Map<String, dynamic>>> handsForSession(String sessionId) async {
     return (await db).query(
       'hands',
-      columns: ['hand_id', 'captured_at', 'hero_net', 'pot', 'marked'],
+      columns: [
+        'hand_id', 'captured_at', 'hero_net', 'pot', 'marked', 'is_spot'
+      ],
       where: 'session_id = ?',
       whereArgs: [sessionId],
       orderBy: 'captured_at DESC',

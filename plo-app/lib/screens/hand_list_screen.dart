@@ -65,11 +65,21 @@ class _HandListScreenState extends State<HandListScreen> {
               final at = DateTime.fromMillisecondsSinceEpoch(
                   h['captured_at'] as int);
               final marked = (h['marked'] as int) == 1;
+              final isSpot = (h['is_spot'] as int? ?? 0) == 1;
               return ListTile(
-                leading: marked
-                    ? const Icon(Icons.flag, color: Color(0xFFEF9F27), size: 20)
-                    : const Icon(Icons.style_outlined, size: 20),
-                title: Text(pot != null ? 'Pot ${money(pot)}' : 'Hand'),
+                leading: isSpot
+                    ? const Icon(Icons.bookmark,
+                        color: Color(0xFFEBCE7A), size: 20)
+                    : marked
+                        ? const Icon(Icons.flag,
+                            color: Color(0xFFEF9F27), size: 20)
+                        : const Icon(Icons.style_outlined, size: 20),
+                title: isSpot
+                    ? const Text('Decision spot',
+                        style: TextStyle(
+                            color: Color(0xFFEBCE7A),
+                            fontWeight: FontWeight.w600))
+                    : Text(pot != null ? 'Pot ${money(pot)}' : 'Hand'),
                 subtitle: Text(
                     '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'),
                 trailing: net == null

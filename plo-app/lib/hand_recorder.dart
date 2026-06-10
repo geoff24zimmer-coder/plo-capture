@@ -81,6 +81,7 @@ Map<String, dynamic> buildHandJson({
   String? notes,
   double? captureSeconds,
   bool markedForReview = false,
+  bool complete = true, // false = a decision spot saved mid-action
 }) {
   final won = winnerSeat != null ? engine.pot - (rake ?? 0) : null;
   final heroCommitted = engine.players[cfg.heroSeat]!.totalCommit;
@@ -172,6 +173,7 @@ Map<String, dynamic> buildHandJson({
     },
     'meta': {
       'marked_for_review': markedForReview,
+      'complete': complete,
       if (notes != null) 'notes': notes,
       if (captureSeconds != null) 'capture_seconds': captureSeconds,
     },
