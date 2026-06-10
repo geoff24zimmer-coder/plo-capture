@@ -15,14 +15,22 @@ class LandingScreen extends StatelessWidget {
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
+          padding: const EdgeInsets.fromLTRB(28, 16, 28, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Spacer(flex: 3),
-              Image.asset('assets/logo.png',
-                  width: 300, fit: BoxFit.contain),
-              const Spacer(flex: 3),
+              // Logo takes the space left over after the (fixed) controls and
+              // scales to fit — so the buttons are ALWAYS visible, even on short
+              // screens where a fixed-size logo would push them off the bottom.
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 340),
+                    child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               _StartButton(
                 label: 'Cash Game',
                 icon: Icons.payments_outlined,
@@ -36,7 +44,7 @@ class LandingScreen extends StatelessWidget {
                 color: const Color(0xFFB8862F),
                 onTap: () => _start(context, 'mtt'),
               ),
-              const Spacer(flex: 2),
+              const SizedBox(height: 6),
               TextButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -48,7 +56,6 @@ class LandingScreen extends StatelessWidget {
                 style: TextButton.styleFrom(
                     foregroundColor: Colors.white.withValues(alpha: 0.6)),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
