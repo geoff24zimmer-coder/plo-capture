@@ -19,6 +19,29 @@ String money(int amount) {
       : '$sign\$${_group(v ~/ 100)}.${rem.toString().padLeft(2, '0')}';
 }
 
+/// Table display denomination. `money` follows [chipMode] ($ cash / chips MTT);
+/// `bb` expresses amounts in big blinds (the solver's convention). Toggled on
+/// the capture/replayer table; the list screens always use money.
+enum TableUnit { money, bb }
+
+TableUnit tableUnit = TableUnit.money;
+int tableBigBlind = 100; // current hand's BB in the smallest unit; set per hand
+
+/// Format an amount for the table, honoring [tableUnit].
+String fmtAmt(int amount) {
+  if (tableUnit == TableUnit.bb) {
+    final bb = tableBigBlind == 0 ? 1 : tableBigBlind;
+    var s = (amount / bb).toStringAsFixed(1);
+    if (s.endsWith('.0')) s = s.substring(0, s.length - 2);
+    return s;
+  }
+  return money(amount);
+}
+
+/// Short label for the current table unit (for the toggle + pot suffix).
+String get tableUnitLabel =>
+    tableUnit == TableUnit.bb ? 'BB' : (chipMode ? 'chips' : '\$');
+
 /// One-off formatting for mixed lists (e.g. the session list).
 String moneyFor(int amount, String gameType) {
   final prev = chipMode;

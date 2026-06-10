@@ -125,6 +125,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     if (cards == null) return;
 
     setState(() {
+      tableBigBlind = bb; // for BB display + SPR on the table
       _cfg = cfg;
       _engine = cfg.buildEngine();
       _positions = positionNames(seats, _buttonSeat);
@@ -228,6 +229,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ? 'New hand'
             : '${widget.session.stakesLabel} · ${_nPlayers}-max'),
         actions: [
+          if (_phase != _Phase.setup)
+            TextButton(
+              onPressed: () => setState(() => tableUnit =
+                  tableUnit == TableUnit.money ? TableUnit.bb : TableUnit.money),
+              child: Text(tableUnitLabel,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700)),
+            ),
           if (_phase != _Phase.setup)
             IconButton(
               tooltip: 'Undo last action',

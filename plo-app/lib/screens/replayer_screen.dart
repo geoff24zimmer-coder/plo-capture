@@ -27,6 +27,7 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
     HandStore.instance.getHand(widget.handId).then((json) {
       final loaded = loadHand(json);
       chipMode = json['session']?['game_type'] == 'mtt';
+      tableBigBlind = loaded.cfg.bigBlind;
       setState(() {
         _hand = loaded;
         _step = 0;
@@ -61,7 +62,18 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Replay')),
+      appBar: AppBar(
+        title: const Text('Replay'),
+        actions: [
+          TextButton(
+            onPressed: () => setState(() => tableUnit =
+                tableUnit == TableUnit.money ? TableUnit.bb : TableUnit.money),
+            child: Text(tableUnitLabel,
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
