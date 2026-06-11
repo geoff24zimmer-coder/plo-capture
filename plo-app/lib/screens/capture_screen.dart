@@ -403,6 +403,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             engine: e,
             heroSeat: _heroSeat,
             anchorSeat: _buttonSeat,
+            heroCards: _heroCards,
             positions: _positions,
             // At the result step with no hero yet (a blind that won unraised),
             // let the user tap their seat to log the hand from.
@@ -411,8 +412,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
                 : null,
           ),
         ),
-        const SizedBox(height: 6),
-        _heroCardsRow(),
         const SizedBox(height: 10),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -551,33 +550,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
           onPressed: _saveHand,
           child: const Text('Save hand'),
         ),
-      ],
-    );
-  }
-
-  Widget _heroCardsRow() => SizedBox(height: 40, child: _cardStrip(_heroCards, size: 18));
-
-  Widget _cardStrip(List<String> cards, {required double size}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (final c in cards)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 0.5),
-            ),
-            child: Text(
-              '${c[0]}${suitGlyph(c[1])}',
-              style: TextStyle(
-                  fontSize: size,
-                  fontWeight: FontWeight.w600,
-                  color: suitColor(c[1])),
-            ),
-          ),
       ],
     );
   }

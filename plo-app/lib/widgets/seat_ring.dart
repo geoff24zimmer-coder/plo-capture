@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../plo_engine.dart';
 import '../util.dart';
+import 'card_picker.dart' show suitColor, suitGlyph;
 
 /// Point on a stadium (rounded-rect with semicircular caps of radius == [hh])
 /// at parametric angle [t], in pixel coords. Seats ride this curve so they all
@@ -35,6 +36,9 @@ class SeatRing extends StatelessWidget {
   /// Seat pinned to the bottom of the ring. Defaults to [heroSeat]; the replayer
   /// keeps hero at the bottom, while live capture anchors the button instead.
   final int? anchorSeat;
+  /// Hero's hole cards, laid on the felt in front of the hero seat (wherever it
+  /// sits) so they track the player instead of floating at the screen bottom.
+  final List<String> heroCards;
   final Map<int, String> positions;
   final void Function(int seat)? onSeatTap; // set: seats become tappable
   // Seat-select mode: the engine has blinds posted, but this isn't a live hand
@@ -46,6 +50,7 @@ class SeatRing extends StatelessWidget {
     required this.engine,
     required this.heroSeat,
     this.anchorSeat,
+    this.heroCards = const [],
     required this.positions,
     this.onSeatTap,
     this.selecting = false,
@@ -100,6 +105,11 @@ class SeatRing extends StatelessWidget {
           ];
           final btnPt = _stadiumPoint(btnTh, cx, cy, bandHw, bandHh);
           final dealerPt = Offset.lerp(Offset(cx, cy), btnPt, 0.80)!;
+          // Hero hole cards ride just inboard of the hero seat, on the felt.
+          final heroIdx = heroSeat == null ? -1 : seats.indexOf(heroSeat!);
+          final heroCardPt = (heroIdx >= 0 && heroCards.isNotEmpty)
+              ? Offset.lerp(seatPts[heroIdx], Offset(cx, cy), 0.30)!
+              : null;
 
           return Stack(
             clipBehavior: Clip.none,
@@ -224,6 +234,13 @@ class SeatRing extends StatelessWidget {
                       isActor: seats[k] == actor,
                     ),
                   ),
+                ),
+              // ---- hero hole cards on the felt in front of the hero seat
+              if (heroCardPt != null)
+                Align(
+                  alignment: Alignment(
+                      (heroCardPt.dx - cx) / cx, (heroCardPt.dy - cy) / cy),
+                  child: _HoleCards(cards: heroCards, cardW: seatD * 0.42),
                 ),
             ],
           );
@@ -430,6 +447,52 @@ class _ActorHaloState extends State<_ActorHalo>
             border: Border.all(color: widget.color, width: 2.4),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The hero's four hole cards as a compact row of card faces, laid on the felt
+/// in front of the hero seat. Dark faces + 4-colour pips so they pop on green.
+class _HoleCards extends StatelessWidget {
+  final List<String> cards;
+  final double cardW;
+  const _HoleCards({required this.cards, required this.cardW});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final c in cards)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 1.1),
+              width: cardW,
+              height: cardW * 1.42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xF21A1E1B),
+                borderRadius: BorderRadius.circular(cardW * 0.2),
+                border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.28), width: 0.6),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 2.5,
+                      offset: Offset(0, 1)),
+                ],
+              ),
+              child: Text(
+                '${c[0]}${suitGlyph(c[1])}',
+                style: TextStyle(
+                    fontSize: cardW * 0.6,
+                    height: 1.0,
+                    fontWeight: FontWeight.w800,
+                    color: suitColor(c[1])),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -81,11 +81,10 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
               child: SeatRing(
                   engine: e,
                   heroSeat: h.cfg.heroSeat,
+                  heroCards: h.heroCards,
                   positions: h.positions),
             ),
             _cardStrip(shownBoard, height: 34, size: 15),
-            const SizedBox(height: 4),
-            _cardStrip(h.heroCards, height: 40, size: 18),
             const SizedBox(height: 6),
             SizedBox(
               height: 24,
