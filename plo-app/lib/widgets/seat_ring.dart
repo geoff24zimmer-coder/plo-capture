@@ -25,10 +25,16 @@ Offset _stadiumPoint(double t, double cx, double cy, double hw, double hh) {
 /// The signature element: a solver-style table — brass rail, radial-green felt,
 /// circular seat badges, a white dealer disk at the button, a clearly-marked
 /// hero seat, live pot + SPR in the centre, and PLO Show emblems flanking it.
-/// Shared by capture AND the replayer. Hero is anchored at the bottom.
+/// Shared by capture AND the replayer. The [anchorSeat] (default: the hero) is
+/// pinned to the bottom of the ring.
 class SeatRing extends StatelessWidget {
   final HandEngine engine;
-  final int heroSeat;
+  /// The claimed hero seat, highlighted gold with a YOU pill. Null while no
+  /// hero is chosen yet — the capture flow claims a seat mid-action.
+  final int? heroSeat;
+  /// Seat pinned to the bottom of the ring. Defaults to [heroSeat]; the replayer
+  /// keeps hero at the bottom, while live capture anchors the button instead.
+  final int? anchorSeat;
   final Map<int, String> positions;
   final void Function(int seat)? onSeatTap; // set: seats become tappable
   // Seat-select mode: the engine has blinds posted, but this isn't a live hand
@@ -39,6 +45,7 @@ class SeatRing extends StatelessWidget {
     super.key,
     required this.engine,
     required this.heroSeat,
+    this.anchorSeat,
     required this.positions,
     this.onSeatTap,
     this.selecting = false,
@@ -68,11 +75,12 @@ class SeatRing extends StatelessWidget {
   Widget build(BuildContext context) {
     final seats = engine.players.keys.toList()..sort();
     final n = seats.length;
-    final heroIdx = seats.indexOf(heroSeat);
+    final anchorIdx =
+        seats.indexOf(anchorSeat ?? heroSeat ?? engine.buttonSeat);
     final actor = selecting ? null : engine.whoseTurn();
     final btnIdx = seats.indexOf(engine.buttonSeat);
 
-    double theta(int k) => math.pi / 2 + (k - heroIdx) * 2 * math.pi / n;
+    double theta(int k) => math.pi / 2 + (k - anchorIdx) * 2 * math.pi / n;
 
     return Center(
       child: AspectRatio(
@@ -189,6 +197,16 @@ class SeatRing extends StatelessWidget {
                 top: dealerPt.dy - seatD * 0.21,
                 child: _DealerDisk(d: seatD * 0.42),
               ),
+              // ---- actor halo: a sonar pulse behind the seat whose turn it is,
+              // so the live actor is unmistakable. Sits under the badge.
+              if (actor != null)
+                for (var k = 0; k < n; k++)
+                  if (seats[k] == actor)
+                    Positioned(
+                      left: seatPts[k].dx - seatD / 2,
+                      top: seatPts[k].dy - seatD / 2,
+                      child: _ActorHalo(diameter: seatD, color: _teal),
+                    ),
               // ---- seats, centred on the rail band
               for (var k = 0; k < n; k++)
                 Positioned(
@@ -202,7 +220,7 @@ class SeatRing extends StatelessWidget {
                       diameter: seatD,
                       player: engine.players[seats[k]]!,
                       label: positions[seats[k]] ?? '?',
-                      isHero: seats[k] == heroSeat,
+                      isHero: heroSeat != null && seats[k] == heroSeat,
                       isActor: seats[k] == actor,
                     ),
                   ),
@@ -347,6 +365,74 @@ class _BetChips extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// A looping "sonar" pulse drawn behind the live actor's seat: two emerald
+/// rings expand outward from the badge and fade, staggered so the pulse reads
+/// as continuous. The badge itself stays a fixed size.
+class _ActorHalo extends StatefulWidget {
+  final double diameter;
+  final Color color;
+  const _ActorHalo({required this.diameter, required this.color});
+
+  @override
+  State<_ActorHalo> createState() => _ActorHaloState();
+}
+
+class _ActorHaloState extends State<_ActorHalo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.diameter;
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (ctx, _) => SizedBox(
+          width: d,
+          height: d,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            // two rings half a cycle apart for a continuous ripple
+            children: [
+              for (final phase in const [0.0, 0.5])
+                _ring((_c.value + phase) % 1.0, d),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _ring(double t, double d) {
+    final scale = 1.0 + t * 0.95; // grows out to ~1.95x the badge
+    final opacity = (1.0 - t) * 0.5; // brightest at the badge edge, fades out
+    return Opacity(
+      opacity: opacity.clamp(0.0, 1.0),
+      child: Transform.scale(
+        scale: scale,
+        child: Container(
+          width: d,
+          height: d,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: widget.color, width: 2.4),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DealerDisk extends StatelessWidget {

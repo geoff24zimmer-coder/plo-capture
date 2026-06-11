@@ -10,7 +10,7 @@ import '../widgets/seat_ring.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/card_picker.dart';
 
-enum _Phase { setup, seats, acting, result }
+enum _Phase { setup, acting, result }
 
 enum _StraddleChoice { none, utg, button }
 
@@ -45,9 +45,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
     super.initState();
     chipMode = _isMtt;
   }
-  late int _nPlayers = widget.session.maxSeats;
-  int _buttonSeat = 1; // chosen by tapping the ring on the seat-select step
-  static const int _heroSeat = 1; // hero is always "you", anchored bottom
+  static const int _nPlayers = 8; // 8-max only — see CLAUDE.md
+  static const int _buttonSeat = 1; // a fixed reference seat, anchored bottom
+  int? _heroSeat; // claimed mid-action when the user reaches their own seat
   _StraddleChoice _straddle = _StraddleChoice.none;
   bool _markedForReview = false;
 
@@ -109,7 +109,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       // A button straddle always plays SB-first (SB opens, straddler acts last).
       // That's the only house rule in these games, so it's not a user choice.
       straddleRule: StraddleActionRule.sbFirst,
-      heroSeat: _heroSeat,
+      heroSeat: _heroSeat ?? _buttonSeat,
       gameType: widget.session.gameType,
       mttLevel: _isMtt
           ? MttLevel(
@@ -123,61 +123,48 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  /// Move from the form to the visual seat-select step.
-  void _continueToSeats() {
-    if (_buttonSeat > _nPlayers) _buttonSeat = 1;
-    setState(() {
-      tableBigBlind = _amount(_bbCtrl, _isMtt ? 200 : 5);
-      _phase = _Phase.seats;
-    });
-  }
-
-  /// Seat-select model: the hero is fixed at the bottom and the user states
-  /// THEIR OWN position. Positions are a pure rotation of the button, so we
-  /// realise a hero position by moving the button under the hood — the dealer
-  /// puck hops around the ring while "you" stay put.
-
-  /// Step the hero's position one notch (BTN→SB→BB→… for dir=+1).
-  void _cycleHero(int dir) {
-    final seats = List.generate(_nPlayers, (i) => i + 1);
-    final bi = seats.indexOf(_buttonSeat);
-    final nbi = ((bi - dir) % _nPlayers + _nPlayers) % _nPlayers;
-    HapticFeedback.selectionClick();
-    setState(() => _buttonSeat = seats[nbi]);
-  }
-
-  /// Adopt the tapped seat's current position as the hero's — "I'm sitting in
-  /// that spot." Tapping your own (bottom) seat is a no-op.
-  void _sitAt(int tappedSeat) {
-    final seats = List.generate(_nPlayers, (i) => i + 1);
-    final heroIdx = seats.indexOf(_heroSeat);
-    final tappedIdx = seats.indexOf(tappedSeat);
-    final btnIdx = seats.indexOf(_buttonSeat);
-    final n = _nPlayers;
-    final newBtnIdx = ((heroIdx - tappedIdx + btnIdx) % n + n) % n;
-    if (newBtnIdx == btnIdx) return;
-    HapticFeedback.selectionClick();
-    setState(() => _buttonSeat = seats[newBtnIdx]);
-  }
-
-  Future<void> _deal() async {
+  /// Build the engine from the form and drop straight into live action. The
+  /// hero seat isn't known yet — the user builds the preflop action in order
+  /// and claims their own seat when the action reaches it (see [_claimHero]).
+  void _startHand() {
     final cfg = _buildConfig();
-    final cards = await pickCards(context,
-        count: 4, excluded: {}, title: 'Hero cards');
-    if (cards == null) return;
     final seats = List.generate(_nPlayers, (i) => i + 1);
     setState(() {
       tableBigBlind = cfg.bigBlind; // for BB display + SPR on the table
       _cfg = cfg;
       _engine = cfg.buildEngine();
       _positions = positionNames(seats, _buttonSeat);
-      _heroCards = cards;
+      _heroSeat = null;
+      _heroCards = [];
       _winnerSeat = null;
       _markedForReview = false;
       _applied.clear();
       _dealTime = DateTime.now();
       _phase = _Phase.acting;
     });
+  }
+
+  /// Claim [seat] as the hero's: prompt for the hero's cards, then mark the
+  /// seat. Used by the "This is me" button on the current actor, and as a
+  /// fallback at the result step for a blind that won unraised and never got a
+  /// turn to act. Cancelling the card picker leaves the seat unclaimed.
+  Future<void> _claimHeroAt(int seat) async {
+    final cards = await pickCards(context,
+        count: 4, excluded: {}, title: 'Your cards');
+    if (cards == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _heroSeat = seat;
+      _heroCards = cards;
+      _cfg = _buildConfig(); // re-stamp so heroSeat serialises correctly
+    });
+  }
+
+  /// "This is me" — claim the seat that's currently to act.
+  Future<void> _claimHero() async {
+    final seat = _engine?.whoseTurn();
+    if (seat == null) return;
+    await _claimHeroAt(seat);
   }
 
   Future<void> _onAction(ActionType type, {int? amount}) async {
@@ -258,8 +245,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// bank a decision spot without playing the orbit out behind them.
   bool get _canSaveSpot {
     final e = _engine;
-    if (e == null || e.status != HandStatus.acting) return false;
-    final hero = _cfg!.heroSeat;
+    final hero = _heroSeat;
+    if (e == null || hero == null || e.status != HandStatus.acting) return false;
     return e.whoseTurn() == hero || _applied.any((a) => a.seat == hero);
   }
 
@@ -294,16 +281,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: _phase == _Phase.seats
+        leading: _phase != _Phase.setup
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back to setup',
                 onPressed: () => setState(() => _phase = _Phase.setup),
               )
             : null,
         title: Text(switch (_phase) {
           _Phase.setup => 'New hand',
-          _Phase.seats => 'Where are you sitting?',
-          _ => '${widget.session.stakesLabel} · ${_nPlayers}-max',
+          _ => '${widget.session.stakesLabel} · 8-max',
         }),
         actions: [
           if (_phase == _Phase.acting || _phase == _Phase.result) ...[
@@ -325,7 +312,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
       body: SafeArea(
         child: switch (_phase) {
           _Phase.setup => _buildSetup(),
-          _Phase.seats => _buildSeatSelect(),
           _ => _buildTable(),
         },
       ),
@@ -384,23 +370,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
           ]),
         ],
         const SizedBox(height: 16),
-        Text('Players: $_nPlayers'),
-        Slider(
-          min: 2,
-          max: 10,
-          divisions: 8,
-          value: _nPlayers.toDouble(),
-          label: '$_nPlayers',
-          onChanged: (v) => setState(() {
-            _nPlayers = v.round();
-            if (_buttonSeat > _nPlayers) _buttonSeat = 1;
-            // UTG straddle is meaningless below 4-handed; drop a stale pick.
-            if (_nPlayers < 4 && _straddle == _StraddleChoice.utg) {
-              _straddle = _StraddleChoice.none;
-            }
-          }),
-        ),
-        const SizedBox(height: 16),
         if (!_isMtt)
         Wrap(spacing: 8, children: [
           for (final (c, label) in [
@@ -418,110 +387,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
         FilledButton(
           style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16)),
-          onPressed: _continueToSeats,
-          child: const Text('Continue', style: TextStyle(fontSize: 16)),
+          onPressed: _startHand,
+          child: const Text('Start hand', style: TextStyle(fontSize: 16)),
         ),
       ],
     );
   }
-
-  /// Visual seat selection: tap the seat with the dealer button; the hero
-  /// (always you, anchored at the bottom) picks up the derived position.
-  Widget _buildSeatSelect() {
-    final seats = List.generate(_nPlayers, (i) => i + 1);
-    final cfg = _buildConfig();
-    final positions = positionNames(seats, _buttonSeat);
-    final heroPos = positions[_heroSeat] ?? '?';
-    return Column(
-      children: [
-        Expanded(
-          child: SeatRing(
-            engine: cfg.buildEngine(),
-            heroSeat: _heroSeat,
-            positions: positions,
-            selecting: true,
-            onSeatTap: _sitAt,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Tap the seat you’re in, or step with the arrows',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      color: Colors.white.withValues(alpha: 0.6))),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _posChevron(Icons.chevron_left, () => _cycleHero(-1)),
-                  const SizedBox(width: 14),
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 138),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161A18),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: const Color(0xFFC9A536), width: 1.4),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('YOU’RE IN',
-                            style: TextStyle(
-                                fontSize: 10,
-                                letterSpacing: 1.6,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white54)),
-                        Text(heroPos,
-                            style: const TextStyle(
-                                fontSize: 26,
-                                height: 1.1,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFFF0C75A))),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  _posChevron(Icons.chevron_right, () => _cycleHero(1)),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16)),
-                  onPressed: _deal,
-                  child:
-                      const Text('Deal hand', style: TextStyle(fontSize: 16)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Round tappable chevron for the position stepper.
-  Widget _posChevron(IconData icon, VoidCallback onTap) => Material(
-        color: const Color(0xFF1E2421),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(9),
-            child: Icon(icon, size: 28, color: const Color(0xFFF0C75A)),
-          ),
-        ),
-      );
 
   Widget _buildTable() {
     final e = _engine!;
@@ -529,7 +400,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
       children: [
         Expanded(
           child: SeatRing(
-              engine: e, heroSeat: _cfg!.heroSeat, positions: _positions),
+            engine: e,
+            heroSeat: _heroSeat,
+            anchorSeat: _buttonSeat,
+            positions: _positions,
+            // At the result step with no hero yet (a blind that won unraised),
+            // let the user tap their seat to log the hand from.
+            onSeatTap: _phase == _Phase.result && _heroSeat == null
+                ? _claimHeroAt
+                : null,
+          ),
         ),
         const SizedBox(height: 6),
         _heroCardsRow(),
@@ -549,7 +429,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
                           icon: const Icon(Icons.bookmark_add_outlined,
                               size: 18),
                           label: Text(
-                              _engine!.whoseTurn() == _cfg!.heroSeat
+                              _engine!.whoseTurn() == _heroSeat
                                   ? 'Save spot — your decision'
                                   : 'Save spot here'),
                           style: OutlinedButton.styleFrom(
@@ -573,6 +453,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
                       const SizedBox(height: 8),
                     ],
                     _actionPanel(),
+                    // Build the action in order; claim your seat when it's your
+                    // turn. The card picker opens on claim.
+                    if (_heroSeat == null && e.whoseTurn() != null) ...[
+                      const SizedBox(height: 10),
+                      _claimHeroButton(),
+                    ],
                   ],
                 ),
         ),
@@ -591,8 +477,48 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
+  /// "This is me" — claim the seat currently to act as the hero's, labelled
+  /// with that seat's position so it's clear which spot you're banking.
+  Widget _claimHeroButton() {
+    final seat = _engine!.whoseTurn();
+    final pos = seat == null ? '' : (_positions[seat] ?? '');
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _claimHero,
+        icon: const Icon(Icons.star, size: 20),
+        label: Text(pos.isEmpty ? 'This is me' : 'This is me — $pos'),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFC9A536),
+          foregroundColor: const Color(0xFF0C0F0E),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          textStyle:
+              const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        ),
+      ),
+    );
+  }
+
   Widget _resultPanel() {
     final e = _engine!;
+    // The hand ended before the user claimed a seat (a blind that won
+    // unraised). Prompt them to tap their seat on the ring above.
+    if (_heroSeat == null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Which seat were you in?',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text('Tap your seat on the table to log this hand',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  color: Colors.white.withValues(alpha: 0.6))),
+        ],
+      );
+    }
     final wonByFold = e.status == HandStatus.wonByFold;
     return Column(
       mainAxisSize: MainAxisSize.min,
