@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../export/download_web.dart';
+import '../export/review_export.dart';
 import '../export/solver_export.dart';
 import '../models/session.dart';
 import '../util.dart';
@@ -29,26 +30,70 @@ class _HandListScreenState extends State<HandListScreen> {
 
   static String _two(int n) => n.toString().padLeft(2, '0');
 
+  static bool _isSpotJson(Map<String, dynamic> h) =>
+      (h['meta'] as Map<String, dynamic>?)?['complete'] == false;
+
   Future<void> _exportForSolver() async {
     final messenger = ScaffoldMessenger.of(context);
-    final hands =
-        await HandStore.instance.handJsonsForSession(widget.session.id);
-    if (hands.isEmpty) {
+    final all = await HandStore.instance.handJsonsForSession(widget.session.id);
+    if (all.isEmpty) {
       messenger.showSnackBar(
           const SnackBar(content: Text('No hands to export yet.')));
       return;
     }
+    // Decision spots carry no hero action — they belong to the review flow, not
+    // the population aggregator (which would refuse them as noHeroAction). Route
+    // by meta.complete; only completed hands contribute frequencies.
+    final spots = all.where(_isSpotJson).length;
+    final complete = all.where((h) => !_isSpotJson(h)).toList();
+    if (complete.isEmpty) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('$spots decision spot${spots == 1 ? '' : 's'} — '
+              'export each for review (tap ⋮ → Export for review).')));
+      return;
+    }
     final now = DateTime.now();
     final date = '${now.year}-${_two(now.month)}-${_two(now.day)}';
-    final bundle = exportPopulation(hands, capturedThrough: date);
+    final bundle = exportPopulation(complete, capturedThrough: date);
     final venue =
         widget.session.venue.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
     downloadZip('population_${venue}_$date.zip', bundle.files);
     if (!mounted) return;
-    await _showExportSummary(bundle);
+    await _showExportSummary(bundle, spots);
   }
 
-  Future<void> _showExportSummary(SolverBundle b) async {
+  Future<void> _exportHandForReview(String handId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final hand = await HandStore.instance.getHand(handId);
+    final rec = buildReviewExport(hand);
+    downloadText(rec.filename, rec.contents);
+    if (!mounted) return;
+    messenger
+        .showSnackBar(SnackBar(content: Text('Exported ${rec.filename}')));
+  }
+
+  Future<void> _confirmDeleteRow(String handId) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete hand?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (yes == true) {
+      await HandStore.instance.deleteHand(handId);
+      _refresh();
+    }
+  }
+
+  Future<void> _showExportSummary(SolverBundle b, int spotCount) async {
     String label(RefusalReason r) => switch (r) {
           RefusalReason.limp => 'Limped pots (no-limp trees)',
           RefusalReason.raiseCapExceeded => 'Past the 5-bet cap',
@@ -71,6 +116,14 @@ class _HandListScreenState extends State<HandListScreen> {
               'across ${b.manifest['node_count']} nodes.',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
+            if (spotCount > 0) ...[
+              const SizedBox(height: 10),
+              Text(
+                '$spotCount decision spot${spotCount == 1 ? '' : 's'} not '
+                'included — export each for review (⋮ → Export for review).',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              ),
+            ],
             if (refused.isNotEmpty) ...[
               const SizedBox(height: 14),
               Text('Dropped (${b.totalHands - b.acceptedHands}):',
@@ -161,9 +214,11 @@ class _HandListScreenState extends State<HandListScreen> {
                     : Text(pot != null ? 'Pot ${money(pot)}' : 'Hand'),
                 subtitle: Text(
                     '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'),
-                trailing: net == null
-                    ? null
-                    : Text(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (net != null)
+                      Text(
                         money(net),
                         style: TextStyle(
                           fontSize: 15,
@@ -173,33 +228,39 @@ class _HandListScreenState extends State<HandListScreen> {
                               : const Color(0xFFE24B4A),
                         ),
                       ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert,
+                          color: isSpot ? const Color(0xFFF0C75A) : null),
+                      tooltip: 'Hand actions',
+                      onSelected: (v) {
+                        final id = h['hand_id'] as String;
+                        if (v == 'review') _exportHandForReview(id);
+                        if (v == 'delete') _confirmDeleteRow(id);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                            value: 'review',
+                            child: ListTile(
+                                leading: Icon(Icons.ios_share, size: 20),
+                                title: Text('Export for review'),
+                                contentPadding: EdgeInsets.zero)),
+                        PopupMenuItem(
+                            value: 'delete',
+                            child: ListTile(
+                                leading: Icon(Icons.delete_outline, size: 20),
+                                title: Text('Delete'),
+                                contentPadding: EdgeInsets.zero)),
+                      ],
+                    ),
+                  ],
+                ),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                       builder: (_) =>
                           ReplayerScreen(handId: h['hand_id'] as String)),
                 ),
-                onLongPress: () async {
-                  final yes = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Delete hand?'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel')),
-                        FilledButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Delete')),
-                      ],
-                    ),
-                  );
-                  if (yes == true) {
-                    await HandStore.instance
-                        .deleteHand(h['hand_id'] as String);
-                    _refresh();
-                  }
-                },
+                onLongPress: () => _confirmDeleteRow(h['hand_id'] as String),
               );
             },
           );

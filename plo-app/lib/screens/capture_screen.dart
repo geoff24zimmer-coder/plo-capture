@@ -272,10 +272,17 @@ class _CaptureScreenState extends State<CaptureScreen> {
     setState(() => _phase = _Phase.setup);
   }
 
-  void _copyJson() {
-    final pretty = const JsonEncoder.withIndent('  ').convert(_buildJson());
+  /// Copy the record JSON to the clipboard. `complete: false` copies a decision
+  /// spot (meta.complete=false) — the record Monker Killer's IMPORT HAND review
+  /// flow wants. A spot has no hero action, which the review importer handles
+  /// (the population export would refuse it as noHeroAction).
+  void _copyJson({bool complete = true}) {
+    final pretty =
+        const JsonEncoder.withIndent('  ').convert(_buildJson(complete: complete));
     Clipboard.setData(ClipboardData(text: pretty));
-    _toast('JSON copied to clipboard');
+    _toast(complete
+        ? 'JSON copied to clipboard'
+        : 'Spot JSON copied — paste into a .plohand.json for Import Hand');
   }
 
   void _toast(String msg) => ScaffoldMessenger.of(context)
@@ -550,6 +557,17 @@ class _CaptureScreenState extends State<CaptureScreen> {
                             side: const BorderSide(color: Color(0xFFC9A536)),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
+                        ),
+                      ),
+                      // Export this decision spot for review (Monker Killer
+                      // IMPORT HAND). Copies the raw complete:false record; the
+                      // review importer treats the hero's action as optional.
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton.icon(
+                          onPressed: () => _copyJson(complete: false),
+                          icon: const Icon(Icons.content_copy, size: 16),
+                          label: const Text('Copy spot JSON (for Import Hand)'),
                         ),
                       ),
                       const SizedBox(height: 8),

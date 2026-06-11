@@ -517,6 +517,11 @@
           "type": "boolean",
           "default": false
         },
+        "complete": {
+          "type": "boolean",
+          "default": true,
+          "description": "false = a decision spot saved mid-action (no hero action recorded). Load-bearing routing field: false records go to the IMPORT HAND review flow, true records may also feed the population aggregator. Mirrored to the DB is_spot column."
+        },
         "capture_seconds": {
           "type": [
             "number",
