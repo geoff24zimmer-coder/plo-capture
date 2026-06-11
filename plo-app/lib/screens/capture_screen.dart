@@ -57,9 +57,26 @@ class _CaptureScreenState extends State<CaptureScreen> {
   HandEngine? _engine;
   Map<int, String> _positions = {};
   List<String> _heroCards = [];
-  int? _winnerSeat; // only set when the hand is won preflop by folds
+  int? _winnerSeat; // won-by-fold seat, or the showdown winner the user taps
   DateTime? _dealTime;
   final List<({int seat, ActionType type, int? amount})> _applied = [];
+
+  // ---- full-hand (MTT only) board + showdown state
+  List<String> _flop = [];
+  String? _turn;
+  String? _river;
+  final Map<int, List<String>> _shownCards = {}; // villain seat -> shown cards
+  bool _addingShown = false; // result step: tapping a seat enters shown cards
+
+  List<String> get _board =>
+      [..._flop, if (_turn != null) _turn!, if (_river != null) _river!];
+
+  /// Every card already known, to exclude from the next pick.
+  Set<String> _knownCards() => {
+        ..._heroCards,
+        ..._board,
+        for (final c in _shownCards.values) ...c,
+      };
 
   // ------------------------------------------------------------- helpers
 
@@ -136,6 +153,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
       _positions = positionNames(seats, _buttonSeat);
       _heroSeat = null;
       _heroCards = [];
+      _flop = [];
+      _turn = null;
+      _river = null;
+      _shownCards.clear();
+      _addingShown = false;
       _winnerSeat = null;
       _markedForReview = false;
       _applied.clear();
@@ -167,6 +189,50 @@ class _CaptureScreenState extends State<CaptureScreen> {
     await _claimHeroAt(seat);
   }
 
+  /// Whether tapping a seat does anything in the result step right now.
+  bool get _resultTappable {
+    final e = _engine;
+    if (_phase != _Phase.result || e == null) return false;
+    if (_heroSeat == null) return true; // claim the seat the hand was logged from
+    if (!_isMtt) return false;
+    if (_addingShown) return true; // entering villain shown cards
+    return e.status == HandStatus.showdown && _winnerSeat == null; // pick winner
+  }
+
+  /// Dispatch a seat tap in the result step by what's currently being asked for.
+  void _onResultSeatTap(int seat) {
+    if (_heroSeat == null) {
+      _claimHeroAt(seat);
+      return;
+    }
+    if (!_isMtt) return;
+    if (_addingShown) {
+      _enterShownCards(seat);
+      return;
+    }
+    if (_engine!.status == HandStatus.showdown && _winnerSeat == null) {
+      _pickWinner(seat);
+    }
+  }
+
+  /// Record the showdown winner — only a seat still in the hand can win.
+  void _pickWinner(int seat) {
+    if (!_engine!.activeSeats.contains(seat)) return;
+    HapticFeedback.selectionClick();
+    setState(() => _winnerSeat = seat);
+  }
+
+  /// Enter the cards a still-in villain showed (full 4-card reveal). The hero's
+  /// cards are already known; blank seats stay mucked/unknown.
+  Future<void> _enterShownCards(int seat) async {
+    final e = _engine!;
+    if (seat == _heroSeat || !e.activeSeats.contains(seat)) return;
+    final cards = await pickCards(context,
+        count: 4, excluded: _knownCards(), title: '${_positions[seat]} shows');
+    if (cards == null) return;
+    setState(() => _shownCards[seat] = cards);
+  }
+
   Future<void> _onAction(ActionType type, {int? amount}) async {
     final e = _engine!;
     final seat = e.whoseTurn();
@@ -180,13 +246,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
       return;
     }
     setState(() {});
-    _checkPreflopOver();
+    if (_isMtt) {
+      await _advanceMtt();
+    } else {
+      _checkPreflopOver();
+    }
   }
 
-  /// Preflop-only capture: end the hand the moment the preflop round closes —
-  /// either it's decided here (everyone folds, or an all-in runs it out) or the
-  /// betting would move to a flop. No board, no showdown is captured.
-  /// A winner is recorded only when the hand is won outright by folds.
+  /// Cash capture is preflop-only: end the hand the moment the preflop round
+  /// closes — decided by folds, an all-in run-out, or the action reaching a
+  /// flop. No board, no showdown. A winner is recorded only on a fold-out.
   void _checkPreflopOver() {
     final e = _engine!;
     final preflopOver =
@@ -198,6 +267,71 @@ class _CaptureScreenState extends State<CaptureScreen> {
           e.status == HandStatus.wonByFold ? e.activeSeats.first : null;
     });
   }
+
+  /// MTT capture plays the whole hand. After each action: if it folded out,
+  /// finish; if a new street opened, prompt for that street's board cards; if
+  /// it reached showdown (incl. an all-in run-out), deal any remaining board
+  /// and move to winner selection.
+  Future<void> _advanceMtt() async {
+    final e = _engine!;
+    if (e.status == HandStatus.wonByFold) {
+      setState(() {
+        _winnerSeat = e.activeSeats.first;
+        _phase = _Phase.result;
+      });
+      return;
+    }
+    if (e.status == HandStatus.showdown) {
+      await _fillRemainingBoard(); // an all-in run-out may skip street prompts
+      if (!mounted) return;
+      setState(() {
+        _winnerSeat = null; // user taps the winner
+        _phase = _Phase.result;
+      });
+      return;
+    }
+    // Still betting — a freshly opened street needs its board cards.
+    await _promptStreetBoard(e.street);
+  }
+
+  /// Prompt for the board cards a just-opened street needs (flop 3, turn 1,
+  /// river 1), unless already entered. Cancelling leaves them blank (partial).
+  Future<void> _promptStreetBoard(Street street) async {
+    if (street == Street.flop && _flop.isEmpty) {
+      final c = await _pickBoard(3, 'Flop');
+      if (c != null) setState(() => _flop = c);
+    } else if (street == Street.turn && _turn == null) {
+      final c = await _pickBoard(1, 'Turn');
+      if (c != null) setState(() => _turn = c.first);
+    } else if (street == Street.river && _river == null) {
+      final c = await _pickBoard(1, 'River');
+      if (c != null) setState(() => _river = c.first);
+    }
+  }
+
+  /// Fill every board card not yet entered, in order — used when an all-in
+  /// run-out jumps straight to showdown without per-street prompts.
+  Future<void> _fillRemainingBoard() async {
+    if (_flop.isEmpty) {
+      final c = await _pickBoard(3, 'Flop');
+      if (c != null) setState(() => _flop = c);
+    }
+    if (_turn == null) {
+      final c = await _pickBoard(1, 'Turn');
+      if (c != null) setState(() => _turn = c.first);
+    }
+    if (_river == null) {
+      final c = await _pickBoard(1, 'River');
+      if (c != null) setState(() => _river = c.first);
+    }
+  }
+
+  Future<List<String>?> _pickBoard(int count, String title) => pickCards(
+        context,
+        count: count,
+        excluded: _knownCards(),
+        title: title,
+      );
 
   /// Deterministic undo: rebuild the engine and replay all but the last
   /// action. Cheap (a hand is <50 events) and impossible to desync.
@@ -211,7 +345,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
     setState(() {
       _engine = e;
       _winnerSeat = null;
-      // Removing one action always reopens preflop action.
+      _addingShown = false;
+      _shownCards.clear();
+      // Trim board cards for any street the engine no longer occupies.
+      if (e.street.index < Street.flop.index) _flop = [];
+      if (e.street.index < Street.turn.index) _turn = null;
+      if (e.street.index < Street.river.index) _river = null;
+      // Removing one action always reopens betting.
       _phase = _Phase.acting;
     });
   }
@@ -221,10 +361,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
         cfg: _cfg!,
         positions: _positions,
         heroCards: _heroCards,
-        flop: const [], // preflop-only: no board captured
-        turnCard: null,
-        riverCard: null,
+        flop: _flop,
+        turnCard: _turn,
+        riverCard: _river,
         winnerSeat: _winnerSeat,
+        shownCards: Map.of(_shownCards),
         sessionId: widget.session.id,
         markedForReview: _markedForReview,
         complete: complete,
@@ -404,12 +545,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
             heroSeat: _heroSeat,
             anchorSeat: _buttonSeat,
             heroCards: _heroCards,
+            board: _board,
+            shownCards: _shownCards,
             positions: _positions,
-            // At the result step with no hero yet (a blind that won unraised),
-            // let the user tap their seat to log the hand from.
-            onSeatTap: _phase == _Phase.result && _heroSeat == null
-                ? _claimHeroAt
-                : null,
+            // In the result step the ring becomes tappable to: claim a seat (a
+            // blind that won unraised), pick the showdown winner, or enter a
+            // villain's shown cards. _onResultSeatTap dispatches by context.
+            onSeatTap: _resultTappable ? _onResultSeatTap : null,
           ),
         ),
         const SizedBox(height: 10),
@@ -519,20 +661,35 @@ class _CaptureScreenState extends State<CaptureScreen> {
       );
     }
     final wonByFold = e.status == HandStatus.wonByFold;
+    final isShowdown = _isMtt && e.status == HandStatus.showdown;
+    final haveWinner = _winnerSeat != null;
+    final headline = wonByFold
+        ? '${_positions[_winnerSeat]} wins ${money(e.pot)} uncontested'
+        : isShowdown
+            ? (haveWinner
+                ? '${_positions[_winnerSeat]} wins ${money(e.pot)}'
+                : 'Showdown · pot ${money(e.pot)}')
+            : 'Preflop captured · pot ${money(e.pot)}';
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text(
-            wonByFold
-                ? '${_positions[_winnerSeat]} wins ${money(e.pot)} uncontested'
-                : 'Preflop captured · pot ${money(e.pot)}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16),
-          ),
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(headline,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16)),
         ),
+        if (isShowdown && !haveWinner)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('Tap the winning seat above',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    color: Colors.white.withValues(alpha: 0.6))),
+          ),
+        if (isShowdown) _shownCardsControls(),
         Row(
           children: [
             ChoiceChip(
@@ -550,6 +707,48 @@ class _CaptureScreenState extends State<CaptureScreen> {
           onPressed: _saveHand,
           child: const Text('Save hand'),
         ),
+      ],
+    );
+  }
+
+  /// Optional villain shown-card capture at an MTT showdown: a toggle that
+  /// makes the ring tappable, plus chips for any cards already entered.
+  Widget _shownCardsControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_shownCards.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final s in _shownCards.entries)
+                  InputChip(
+                    label: Text(
+                        '${_positions[s.key]}: ${s.value.map((c) => '${c[0]}${suitGlyph(c[1])}').join(' ')}'),
+                    onDeleted: () =>
+                        setState(() => _shownCards.remove(s.key)),
+                  ),
+              ],
+            ),
+          ),
+        OutlinedButton.icon(
+          onPressed: () => setState(() => _addingShown = !_addingShown),
+          icon: Icon(_addingShown ? Icons.check : Icons.add, size: 18),
+          label: Text(_addingShown
+              ? 'Done — tap a seat to add cards'
+              : 'Add shown cards (optional)'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFF0C75A),
+            side: BorderSide(
+                color: const Color(0xFFC9A536)
+                    .withValues(alpha: _addingShown ? 1 : 0.5)),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+          ),
+        ),
+        const SizedBox(height: 8),
       ],
     );
   }

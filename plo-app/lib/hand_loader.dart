@@ -13,6 +13,7 @@ class LoadedHand {
   final String? turnCard;
   final String? riverCard;
   final int? winnerSeat;
+  final Map<int, List<String>> shownCards; // villain seat -> cards seen
   final Map<String, dynamic> raw;
 
   const LoadedHand({
@@ -24,6 +25,7 @@ class LoadedHand {
     required this.turnCard,
     required this.riverCard,
     required this.winnerSeat,
+    required this.shownCards,
     required this.raw,
   });
 
@@ -83,6 +85,13 @@ LoadedHand loadHand(Map<String, dynamic> j) {
   );
 
   final board = j['board'] as Map<String, dynamic>? ?? {};
+  final showdown =
+      (j['showdown'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+  final shown = <int, List<String>>{
+    for (final s in showdown)
+      if ((s['cards'] as List?)?.isNotEmpty ?? false)
+        s['seat'] as int: (s['cards'] as List).cast<String>(),
+  };
   final results = j['results'] as Map<String, dynamic>? ?? {};
   final pots = results['pots'] as List? ?? [];
   int? winner;
@@ -112,6 +121,7 @@ LoadedHand loadHand(Map<String, dynamic> j) {
     turnCard: board['turn'] as String?,
     riverCard: board['river'] as String?,
     winnerSeat: winner,
+    shownCards: shown,
     raw: j,
   );
 }

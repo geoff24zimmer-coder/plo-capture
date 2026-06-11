@@ -39,6 +39,10 @@ class SeatRing extends StatelessWidget {
   /// Hero's hole cards, laid on the felt in front of the hero seat (wherever it
   /// sits) so they track the player instead of floating at the screen bottom.
   final List<String> heroCards;
+  /// Community cards on the felt — empty preflop, up to 5 by the river.
+  final List<String> board;
+  /// Villain shown cards by seat, laid in front of their seats at showdown.
+  final Map<int, List<String>> shownCards;
   final Map<int, String> positions;
   final void Function(int seat)? onSeatTap; // set: seats become tappable
   // Seat-select mode: the engine has blinds posted, but this isn't a live hand
@@ -51,6 +55,8 @@ class SeatRing extends StatelessWidget {
     required this.heroSeat,
     this.anchorSeat,
     this.heroCards = const [],
+    this.board = const [],
+    this.shownCards = const {},
     required this.positions,
     this.onSeatTap,
     this.selecting = false,
@@ -105,11 +111,24 @@ class SeatRing extends StatelessWidget {
           ];
           final btnPt = _stadiumPoint(btnTh, cx, cy, bandHw, bandHh);
           final dealerPt = Offset.lerp(Offset(cx, cy), btnPt, 0.80)!;
-          // Hero hole cards ride just inboard of the hero seat, on the felt.
-          final heroIdx = heroSeat == null ? -1 : seats.indexOf(heroSeat!);
-          final heroCardPt = (heroIdx >= 0 && heroCards.isNotEmpty)
-              ? Offset.lerp(seatPts[heroIdx], Offset(cx, cy), 0.30)!
-              : null;
+          // Hole cards (hero + any shown villains) ride just inboard of their
+          // seat, on the felt, so they track the player. Hero is full opacity.
+          final cardLayers = <({Offset pt, List<String> cards, bool hero})>[];
+          void addCards(int? seat, List<String> cards, bool hero) {
+            if (seat == null || cards.isEmpty) return;
+            final i = seats.indexOf(seat);
+            if (i < 0) return;
+            cardLayers.add((
+              pt: Offset.lerp(seatPts[i], Offset(cx, cy), 0.30)!,
+              cards: cards,
+              hero: hero,
+            ));
+          }
+
+          addCards(heroSeat, heroCards, true);
+          for (final e in shownCards.entries) {
+            addCards(e.key, e.value, false);
+          }
 
           return Stack(
             clipBehavior: Clip.none,
@@ -179,10 +198,16 @@ class SeatRing extends StatelessWidget {
                         width: tableW * 0.15),
                   ),
                 ),
-              // ---- centre pot + SPR (hidden until the hand is live)
+              // ---- community board across the centre of the felt
+              if (board.isNotEmpty)
+                Align(
+                  alignment: const Alignment(0, -0.22),
+                  child: _HoleCards(cards: board, cardW: seatD * 0.5),
+                ),
+              // ---- pot + SPR; drops below the board once one is dealt
               if (!selecting)
                 Align(
-                  alignment: const Alignment(0, 0),
+                  alignment: Alignment(0, board.isEmpty ? 0 : 0.32),
                   child: _PotPill(pot: engine.pot, spr: _spr()),
                 ),
               // ---- chips in front of each seat that has committed this street;
@@ -235,12 +260,15 @@ class SeatRing extends StatelessWidget {
                     ),
                   ),
                 ),
-              // ---- hero hole cards on the felt in front of the hero seat
-              if (heroCardPt != null)
+              // ---- hole cards on the felt in front of each revealed seat
+              for (final cl in cardLayers)
                 Align(
-                  alignment: Alignment(
-                      (heroCardPt.dx - cx) / cx, (heroCardPt.dy - cy) / cy),
-                  child: _HoleCards(cards: heroCards, cardW: seatD * 0.42),
+                  alignment:
+                      Alignment((cl.pt.dx - cx) / cx, (cl.pt.dy - cy) / cy),
+                  child: Opacity(
+                    opacity: cl.hero ? 1.0 : 0.82,
+                    child: _HoleCards(cards: cl.cards, cardW: seatD * 0.42),
+                  ),
                 ),
             ],
           );

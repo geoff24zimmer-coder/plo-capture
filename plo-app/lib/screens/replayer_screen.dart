@@ -4,7 +4,6 @@ import '../hand_loader.dart';
 import '../plo_engine.dart';
 import '../util.dart';
 import '../widgets/seat_ring.dart';
-import '../widgets/card_picker.dart' show suitColor, suitGlyph;
 
 /// Step through a stored hand action-by-action. Each step rebuilds the
 /// engine from the start — every frame is a node in the hand's game tree,
@@ -82,9 +81,14 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
                   engine: e,
                   heroSeat: h.cfg.heroSeat,
                   heroCards: h.heroCards,
+                  board: shownBoard,
+                  // Villains' cards are revealed only once the replay reaches
+                  // showdown — not during the earlier streets.
+                  shownCards: e.status == HandStatus.showdown
+                      ? h.shownCards
+                      : const {},
                   positions: h.positions),
             ),
-            _cardStrip(shownBoard, height: 34, size: 15),
             const SizedBox(height: 6),
             SizedBox(
               height: 24,
@@ -151,36 +155,5 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
       return '$desc$allIn — $w wins ${money(e.pot)}';
     }
     return '$desc$allIn';
-  }
-
-  Widget _cardStrip(List<String> cards,
-      {required double height, required double size}) {
-    return SizedBox(
-      height: height,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (final c in cards)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18), width: 0.5),
-              ),
-              child: Text(
-                '${c[0]}${suitGlyph(c[1])}',
-                style: TextStyle(
-                    fontSize: size,
-                    fontWeight: FontWeight.w600,
-                    color: suitColor(c[1])),
-              ),
-            ),
-        ],
-      ),
-    );
   }
 }

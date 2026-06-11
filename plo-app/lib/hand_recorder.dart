@@ -76,6 +76,7 @@ Map<String, dynamic> buildHandJson({
   String? turnCard,
   String? riverCard,
   int? winnerSeat,
+  Map<int, List<String>> shownCards = const {}, // villain seat -> shown cards
   int? rake,
   String? sessionId,
   String? notes,
@@ -155,6 +156,11 @@ Map<String, dynamic> buildHandJson({
       if (turnCard != null) 'turn': turnCard,
       if (riverCard != null) 'river': riverCard,
     },
+    if (shownCards.isNotEmpty)
+      'showdown': [
+        for (final e in shownCards.entries)
+          {'seat': e.key, 'reveal': 'full', 'cards': e.value},
+      ],
     'results': {
       if (winnerSeat != null)
         'pots': [
