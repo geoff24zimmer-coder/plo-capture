@@ -118,7 +118,7 @@ class HandStore {
     return (await db).query(
       'hands',
       columns: [
-        'hand_id', 'captured_at', 'hero_net', 'pot', 'marked', 'is_spot'
+        'hand_id', 'captured_at', 'hero_net', 'pot', 'marked', 'is_spot', 'json'
       ],
       where: 'session_id = ?',
       whereArgs: [sessionId],

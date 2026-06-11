@@ -51,6 +51,39 @@ String moneyFor(int amount, String gameType) {
   return out;
 }
 
+/// Compact, scannable label for a saved hand: hero position, the four
+/// hole-card ranks (high→low, `T` for ten) and the PLO suit shape —
+/// e.g. `MP · AAKK ds`. Suit shapes: `ds` double-suited (2-2),
+/// `ss` single-suited (2-1-1), `r` rainbow (1-1-1-1), `ts` three of a suit
+/// (3-1), `mono` four of a suit. Derived from the stored canonical JSON, so it
+/// labels hands captured before this label existed too.
+String handLabel(Map<String, dynamic> json) {
+  final hero = json['hero'] as Map<String, dynamic>?;
+  final heroSeat = hero?['seat'] as int?;
+  final players = (json['players'] as List?) ?? const [];
+  var pos = '?';
+  for (final p in players) {
+    if ((p as Map)['seat'] == heroSeat) {
+      pos = (p['position'] as String?) ?? '?';
+      break;
+    }
+  }
+  final cards = (hero?['cards'] as List?)?.cast<String>() ?? const <String>[];
+  if (cards.isEmpty) return pos;
+  const order = 'AKQJT98765432';
+  final ranks = [for (final c in cards) c[0]]
+    ..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
+  final counts = <String, int>{};
+  for (final c in cards) {
+    counts[c[1]] = (counts[c[1]] ?? 0) + 1;
+  }
+  final desc = counts.values.toList()..sort((a, b) => b - a);
+  final shape = (desc.length >= 2 && desc[0] == 2 && desc[1] == 2)
+      ? 'ds'
+      : switch (desc.first) { 4 => 'mono', 3 => 'ts', 2 => 'ss', _ => 'r' };
+  return '$pos · ${ranks.join()} $shape';
+}
+
 /// Position label for every occupied seat, derived from the button.
 /// [seats] must be sorted clockwise (ascending seat number).
 Map<int, String> positionNames(List<int> seats, int buttonSeat) {

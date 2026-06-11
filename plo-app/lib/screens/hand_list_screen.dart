@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../export/download_web.dart';
@@ -198,6 +199,10 @@ class _HandListScreenState extends State<HandListScreen> {
                   h['captured_at'] as int);
               final marked = (h['marked'] as int) == 1;
               final isSpot = (h['is_spot'] as int? ?? 0) == 1;
+              final label = handLabel(
+                  jsonDecode(h['json'] as String) as Map<String, dynamic>);
+              final time =
+                  '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
               return ListTile(
                 leading: isSpot
                     ? const Icon(Icons.bookmark,
@@ -206,14 +211,15 @@ class _HandListScreenState extends State<HandListScreen> {
                         ? const Icon(Icons.flag,
                             color: Color(0xFFEF9F27), size: 20)
                         : const Icon(Icons.style_outlined, size: 20),
-                title: isSpot
-                    ? const Text('Decision spot',
-                        style: TextStyle(
-                            color: Color(0xFFF0C75A),
-                            fontWeight: FontWeight.w600))
-                    : Text(pot != null ? 'Pot ${money(pot)}' : 'Hand'),
+                title: Text(
+                  isSpot ? '$label  (spot)' : label,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                      color: isSpot ? const Color(0xFFF0C75A) : null),
+                ),
                 subtitle: Text(
-                    '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'),
+                    !isSpot && pot != null ? '$time · Pot ${money(pot)}' : time),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
