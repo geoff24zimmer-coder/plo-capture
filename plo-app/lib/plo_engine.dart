@@ -132,6 +132,11 @@ class HandEngine {
   Street street = Street.preflop;
   HandStatus status = HandStatus.acting;
   int pot = 0; // running total of ALL chips committed (all streets)
+  // Big-blind ante is held OUT of the pot during preflop: under WSOP rules it
+  // doesn't count toward the preflop pot-limit bet (UTG open = 3·BB + SB, ante
+  // invisible). It merges into the pot the moment preflop ends — the flop is
+  // dealt or the hand is won there — after which it counts normally.
+  int _deadAnte = 0;
   int currentBet = 0; // highest street commitment this street
   int _lastRaiseSize = 0; // increment of last full bet/raise
   final List<int> _queue = []; // seats pending action, in order
@@ -171,10 +176,17 @@ class HandEngine {
       final amt = fb.amount < p.stack ? fb.amount : p.stack;
       p.stack -= amt;
       p.totalCommit += amt;
-      pot += amt;
-      // Dead money (BB ante, dead blinds) is in the pot and the player's
-      // total, but is NOT a street commitment: it must never count toward the
-      // facing bet, or the poster can't check/call their live blind. (Inv. 6)
+      // The BB ante is dead money the poster still commits, but it's held out
+      // of the preflop pot for bet-sizing (merged in when preflop ends). All
+      // other posts — blinds, straddles, dead blinds — go straight to the pot.
+      if (fb.type == PostType.ante) {
+        _deadAnte += amt;
+      } else {
+        pot += amt;
+      }
+      // Dead money (BB ante, dead blinds) is in the player's total but is NOT a
+      // street commitment: it must never count toward the facing bet, or the
+      // poster can't check/call their live blind. (Inv. 6)
       if (fb.isLive) {
         p.streetCommit += amt;
         if (fb.type != PostType.ante && p.streetCommit > currentBet) {
@@ -410,10 +422,18 @@ class HandEngine {
     }
   }
 
+  /// Merge the held BB ante into the pot — called the moment preflop ends, so
+  /// the ante counts from the flop on (and is won with the pot if it ends here).
+  void _mergeAnte() {
+    pot += _deadAnte;
+    _deadAnte = 0;
+  }
+
   void _settle() {
     final live = activeSeats;
     if (live.length == 1) {
       status = HandStatus.wonByFold;
+      _mergeAnte(); // the ante is won with the pot, even preflop
       _queue.clear();
       return;
     }
@@ -428,6 +448,7 @@ class HandEngine {
   }
 
   void _nextStreet() {
+    if (street == Street.preflop) _mergeAnte(); // ante joins the pot on the flop
     street = Street.values[street.index + 1];
     currentBet = 0;
     _lastRaiseSize = bigBlind; // min bet postflop = one big blind

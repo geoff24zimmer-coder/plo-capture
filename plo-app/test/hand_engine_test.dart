@@ -191,4 +191,55 @@ void main() {
       expect(e.status, HandStatus.showdown);
     });
   });
+
+  group('MTT big-blind ante (WSOP pot-limit rule)', () {
+    // 100/200, 200 BB ante. Button on 1 -> SB 2, BB 3, UTG 4 first to act.
+    HandEngine bbAnteHand() => HandEngine(
+          seatedPlayers: [
+            for (var s = 1; s <= 8; s++) PlayerState(s, 20000),
+          ],
+          buttonSeat: 1,
+          bigBlind: 200,
+          forcedBets: const [
+            ForcedBet(2, PostType.sb, 100),
+            ForcedBet(3, PostType.bb, 200),
+            ForcedBet(3, PostType.ante, 200, isLive: false),
+          ],
+        );
+
+    test('ante is held out of the preflop pot — UTG open is 3·BB + SB', () {
+      final e = bbAnteHand();
+      expect(e.pot, 300); // SB 100 + BB 200; the 200 ante is held aside
+      expect(e.whoseTurn(), 4); // UTG
+      final la = e.legalActions();
+      expect(la.toCall, 200);
+      expect(la.maxRaiseTo, 700); // NOT 900 — ante invisible to the preflop pot
+      expect(la.sizing!.pot, 700);
+    });
+
+    test('the ante merges into the pot once the flop is dealt', () {
+      final e = bbAnteHand();
+      e.apply(4, ActionType.raise, amount: 700); // UTG pots
+      for (final s in [5, 6, 7, 8, 1, 2]) {
+        e.apply(s, ActionType.fold); // fold around to the BB
+      }
+      expect(e.whoseTurn(), 3);
+      e.apply(3, ActionType.call, amount: 700); // BB calls -> flop
+      expect(e.street, Street.flop);
+      // 700 (UTG) + 700 (BB) + 100 (SB) + 200 (ante, now merged) = 1700
+      expect(e.pot, 1700);
+    });
+
+    test('won preflop by folds still scoops the ante', () {
+      final e = bbAnteHand();
+      e.apply(4, ActionType.raise, amount: 700);
+      for (final s in [5, 6, 7, 8, 1, 2]) {
+        e.apply(s, ActionType.fold);
+      }
+      e.apply(3, ActionType.fold); // BB folds too -> UTG wins it preflop
+      expect(e.status, HandStatus.wonByFold);
+      // 700 (UTG) + 200 (BB) + 100 (SB) + 200 (ante) = 1200
+      expect(e.pot, 1200);
+    });
+  });
 }
