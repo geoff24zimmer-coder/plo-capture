@@ -73,6 +73,34 @@ class _HandListScreenState extends State<HandListScreen> {
         .showSnackBar(SnackBar(content: Text('Exported ${rec.filename}')));
   }
 
+  Future<void> _confirmEndSession() async {
+    final s = widget.session;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('End session?'),
+        content: Text(
+            'End “${s.stakesLabel} · ${s.venue}”? You can still open it from '
+            'Past sessions — it just won’t show as your current session.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('End session')),
+        ],
+      ),
+    );
+    if (yes == true) {
+      await HandStore.instance.endSession(s.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Session ended')));
+      Navigator.pop(context); // back to landing / past sessions
+    }
+  }
+
   Future<void> _confirmDeleteRow(String handId) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -162,6 +190,23 @@ class _HandListScreenState extends State<HandListScreen> {
             icon: const Icon(Icons.ios_share),
             onPressed: _exportForSolver,
           ),
+          if (s.isActive)
+            PopupMenuButton<String>(
+              tooltip: 'Session',
+              onSelected: (v) {
+                if (v == 'end') _confirmEndSession();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'end',
+                  child: ListTile(
+                    leading: Icon(Icons.stop_circle_outlined, size: 20),
+                    title: Text('End session'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

@@ -20,12 +20,16 @@ class HandStore {
         : p.join(await getDatabasesPath(), 'plo_capture.db');
     _db ??= await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onUpgrade: (d, oldV, newV) async {
         // v2: tag decision spots (hands saved mid-action) for the hand list.
         if (oldV < 2) {
           await d.execute(
               'ALTER TABLE hands ADD COLUMN is_spot INTEGER NOT NULL DEFAULT 0');
+        }
+        // v3: sessions can be ended; null ended_at = the active session.
+        if (oldV < 3) {
+          await d.execute('ALTER TABLE sessions ADD COLUMN ended_at INTEGER');
         }
       },
       onCreate: (d, v) async {
@@ -37,7 +41,8 @@ class HandStore {
             sb INTEGER NOT NULL,
             bb INTEGER NOT NULL,
             venue TEXT NOT NULL,
-            max_seats INTEGER NOT NULL
+            max_seats INTEGER NOT NULL,
+            ended_at INTEGER
           )
         ''');
         await d.execute('''
@@ -61,8 +66,45 @@ class HandStore {
 
   // ------------------------------------------------------------ sessions
 
-  Future<void> createSession(Session s) async =>
-      (await db).insert('sessions', s.toRow());
+  Future<void> createSession(Session s) async {
+    final d = await db;
+    // Only one session is "current" at a time — starting a new one ends any
+    // still-active sessions (they remain in Past sessions).
+    await d.update(
+        'sessions', {'ended_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'ended_at IS NULL');
+    await d.insert('sessions', s.toRow());
+  }
+
+  /// The resumable "current" session — the most recent one that hasn't been
+  /// ended — with its hand count and running hero net (for the resume button).
+  /// Null when there's no active session.
+  Future<({Session session, int handCount, int net})?> currentSession() async {
+    final rows = await (await db).rawQuery('''
+      SELECT s.*, COUNT(h.hand_id) AS cnt, COALESCE(SUM(h.hero_net), 0) AS net
+      FROM sessions s
+      LEFT JOIN hands h ON h.session_id = s.id
+      WHERE s.ended_at IS NULL
+      GROUP BY s.id
+      ORDER BY s.created_at DESC
+      LIMIT 1
+    ''');
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return (
+      session: Session.fromRow(r),
+      handCount: (r['cnt'] as int?) ?? 0,
+      net: (r['net'] as int?) ?? 0,
+    );
+  }
+
+  /// Mark a session ended so it's no longer the resumable current session.
+  Future<void> endSession(String id) async => (await db).update(
+        'sessions',
+        {'ended_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
 
   /// Delete a session and all of its hands. SQLite foreign keys aren't
   /// enforced here, so cascade explicitly; one transaction keeps it atomic.

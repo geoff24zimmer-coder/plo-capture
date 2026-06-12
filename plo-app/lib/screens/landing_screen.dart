@@ -1,13 +1,33 @@
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../models/session.dart';
+import '../util.dart';
 import 'capture_screen.dart';
+import 'hand_list_screen.dart';
 import 'session_list_screen.dart';
 
-/// App home. Pick a game type to start a session and drop straight into hand
-/// capture; past sessions (history + replay) are one tap away.
-class LandingScreen extends StatelessWidget {
+/// App home. Resume the current (unfinished) session in one tap, or start a new
+/// one; past sessions (history + replay) are one tap away.
+class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
+  @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen> {
+  ({Session session, int handCount, int net})? _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    HandStore.instance.currentSession().then((c) {
+      if (mounted) setState(() => _current = c);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +51,7 @@ class LandingScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              if (_current != null) _ResumeCard(current: _current!, onTap: _resume),
               _StartButton(
                 label: 'Cash Game',
                 icon: Icons.payments_outlined,
@@ -46,11 +67,13 @@ class LandingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               TextButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SessionListScreen()),
-                ),
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SessionListScreen()),
+                  );
+                  _load();
+                },
                 icon: const Icon(Icons.history, size: 18),
                 label: const Text('Past sessions'),
                 style: TextButton.styleFrom(
@@ -63,6 +86,14 @@ class LandingScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _resume(Session s) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => HandListScreen(session: s)),
+    );
+    _load();
+  }
+
   Future<void> _start(BuildContext context, String gameType) async {
     final session = await _sessionSheet(context, gameType);
     if (session == null) return;
@@ -72,6 +103,7 @@ class LandingScreen extends StatelessWidget {
       context,
       MaterialPageRoute(builder: (_) => CaptureScreen(session: session)),
     );
+    _load();
   }
 
   /// Quick session setup: venue (+ cash stakes) + table size. Returns a built
@@ -161,6 +193,74 @@ class LandingScreen extends StatelessWidget {
           ? (isMtt ? 'Tournament' : 'Cash game')
           : venueCtrl.text.trim(),
       maxSeats: seats,
+    );
+  }
+}
+
+/// Prominent "pick up where you left off" card for the active session.
+class _ResumeCard extends StatelessWidget {
+  final ({Session session, int handCount, int net}) current;
+  final Future<void> Function(Session) onTap;
+  const _ResumeCard({required this.current, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = current.session;
+    final hands = current.handCount;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: const Color(0xFF16181B),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => onTap(s),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFC9A536), width: 1.5),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                const Icon(Icons.play_circle_fill,
+                    color: Color(0xFFF0C75A), size: 32),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('RESUME SESSION',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFFF0C75A),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0)),
+                      const SizedBox(height: 3),
+                      Text('${s.stakesLabel} · ${s.venue}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
+                      Text(
+                        '$hands hand${hands == 1 ? '' : 's'}'
+                        '${current.net != 0 ? ' · ${moneyFor(current.net, s.gameType)}' : ''}',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.6)),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right,
+                    color: Colors.white.withValues(alpha: 0.5)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
