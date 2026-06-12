@@ -191,21 +191,19 @@ class _HandListScreenState extends State<HandListScreen> {
             onPressed: _exportForSolver,
           ),
           if (s.isActive)
-            PopupMenuButton<String>(
-              tooltip: 'Session',
-              onSelected: (v) {
-                if (v == 'end') _confirmEndSession();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'end',
-                  child: ListTile(
-                    leading: Icon(Icons.stop_circle_outlined, size: 20),
-                    title: Text('End session'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _confirmEndSession,
+                icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                label: const Text('End'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFE24B4A),
+                  backgroundColor: const Color(0x1AE24B4A),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                 ),
-              ],
+              ),
             ),
         ],
       ),
