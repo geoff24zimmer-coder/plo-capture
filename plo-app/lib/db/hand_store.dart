@@ -64,6 +64,15 @@ class HandStore {
     return _db!;
   }
 
+  /// Open the database (which lazily loads the sqlite3 wasm + IndexedDB on web)
+  /// ahead of time, so the first session-create / hand-save isn't blocked on
+  /// that one-time init. Fire-and-forget from main(); errors are swallowed.
+  Future<void> warmUp() async {
+    try {
+      await (await db).rawQuery('SELECT 1');
+    } catch (_) {}
+  }
+
   // ------------------------------------------------------------ sessions
 
   Future<void> createSession(Session s) async {

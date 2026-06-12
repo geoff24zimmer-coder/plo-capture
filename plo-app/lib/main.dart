@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'db/hand_store.dart';
 import 'screens/landing_screen.dart';
 import 'screens/replayer_screen.dart';
 import 'share_link.dart';
@@ -14,6 +15,9 @@ void main() {
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
   }
+  // Prime the DB in the background (during the splash) so the first session
+  // create / hand save is instant rather than waiting on lazy wasm/IndexedDB init.
+  HandStore.instance.warmUp();
   runApp(const PloCaptureApp());
 }
 
