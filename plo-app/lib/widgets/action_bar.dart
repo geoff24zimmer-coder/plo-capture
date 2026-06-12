@@ -80,11 +80,18 @@ class ActionBar extends StatelessWidget {
     final out = <Widget>[];
 
     if (isMtt) {
+      // MTT quick sizes. A BET (facing no bet — e.g. leading postflop, where a
+      // multiple of the non-existent bet would be 0) sizes in big blinds:
+      // 2bb / 2.5bb / 3bb. A RAISE (facing a bet) sizes off the bet faced:
+      // 2x / 2.5x / 3x. Pot is always offered below.
+      final base = isBet ? tableBigBlind : currentBet;
+      final suffix = isBet ? 'bb' : 'x';
       for (final m in const [2.0, 2.5, 3.0]) {
-        final raw = (m * currentBet).round();
+        final raw = (m * base).round();
         if (raw >= min && raw < max) {
           out.add(Expanded(
-            child: _sizeBtn(_multLabel(m), raw, () => onAction(act, amount: raw)),
+            child: _sizeBtn(
+                _sizeLabel(m, suffix), raw, () => onAction(act, amount: raw)),
           ));
           out.add(const SizedBox(width: 6));
         }
@@ -125,8 +132,8 @@ class ActionBar extends StatelessWidget {
     return out;
   }
 
-  String _multLabel(double m) =>
-      m == m.roundToDouble() ? '${m.toInt()}x' : '${m}x';
+  String _sizeLabel(double m, String suffix) =>
+      (m == m.roundToDouble() ? '${m.toInt()}' : '$m') + suffix;
 
   Widget _sizeBtn(String label, int amount, VoidCallback onTap) {
     return OutlinedButton(
