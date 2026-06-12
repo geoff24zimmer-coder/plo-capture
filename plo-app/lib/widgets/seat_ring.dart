@@ -101,16 +101,20 @@ class SeatRing extends StatelessWidget {
 
     return Center(
       child: AspectRatio(
-        aspectRatio: 0.72, // tall/vertical racetrack — fills the portrait area
+        aspectRatio: 0.6, // long vertical racetrack (pill) — fills the portrait
         child: LayoutBuilder(builder: (ctx, c) {
           final tableW = c.maxWidth;
           final tableH = c.maxHeight;
           final seatD = (tableW * 0.10).clamp(34.0, 52.0);
           final btnTh = theta(btnIdx);
-          // Rail-band centre radii (between the felt edge and the rail's outer
-          // edge), in px — seats are centred here so they straddle the gold.
           final cx = tableW / 2, cy = tableH / 2;
-          final bandHw = tableW * 0.465, bandHh = tableH * 0.44;
+          // Uniform-thickness gold rail (a pill): the felt is inset from the
+          // rail by the same pixel amount on every side, so the gold ring is
+          // the same width all the way round. Seats ride the rail's centre.
+          final railOutW = tableW * 0.97, railOutH = tableH * 0.97;
+          final railT = tableW * 0.05;
+          final bandHw = railOutW / 2 - railT / 2;
+          final bandHh = railOutH / 2 - railT / 2;
           final seatPts = [
             for (var k = 0; k < n; k++)
               _stadiumPoint(theta(k), cx, cy, bandHw, bandHh)
@@ -146,11 +150,14 @@ class SeatRing extends StatelessWidget {
           return Stack(
             clipBehavior: Clip.none,
             children: [
-              // ---- brass rail
+              // ---- table: a uniform-thickness gold rail (pill) wrapping the
+              // felt. The felt is a uniform inset (Padding) of the rail, so the
+              // gold ring is the same width all the way round; an inset inner
+              // ring marks the betting line.
               Center(
-                child: FractionallySizedBox(
-                  widthFactor: 0.96,
-                  heightFactor: 0.94,
+                child: SizedBox(
+                  width: railOutW,
+                  height: railOutH,
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(999),
@@ -167,36 +174,30 @@ class SeatRing extends StatelessWidget {
                             offset: Offset(0, 6)),
                       ],
                     ),
-                  ),
-                ),
-              ),
-              // ---- felt
-              Center(
-                child: FractionallySizedBox(
-                  widthFactor: 0.90,
-                  heightFactor: 0.82,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      gradient: const RadialGradient(
-                        center: Alignment.center,
-                        radius: 0.75,
-                        colors: [_feltCtr, _feltEdge],
+                    child: Padding(
+                      padding: EdgeInsets.all(railT),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          borderRadius:
+                              BorderRadius.all(Radius.circular(999)),
+                          gradient: RadialGradient(
+                            center: Alignment.center,
+                            radius: 0.75,
+                            colors: [_feltCtr, _feltEdge],
+                          ),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(railT * 1.7),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                  color: _goldLt.withValues(alpha: 0.22),
+                                  width: 1),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-              // ---- inner betting line
-              Center(
-                child: FractionallySizedBox(
-                  widthFactor: 0.78,
-                  heightFactor: 0.60,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                          color: _goldLt.withValues(alpha: 0.22), width: 1),
                     ),
                   ),
                 ),
