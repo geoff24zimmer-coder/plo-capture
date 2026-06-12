@@ -267,7 +267,11 @@ class SeatRing extends StatelessWidget {
                       Alignment((cl.pt.dx - cx) / cx, (cl.pt.dy - cy) / cy),
                   child: Opacity(
                     opacity: cl.hero ? 1.0 : 0.82,
-                    child: _HoleCards(cards: cl.cards, cardW: seatD * 0.42),
+                    // Hero's hand is the focal point — slightly larger than
+                    // shown villain cards, but still under the board (0.50).
+                    child: _HoleCards(
+                        cards: cl.cards,
+                        cardW: seatD * (cl.hero ? 0.48 : 0.42)),
                   ),
                 ),
             ],
