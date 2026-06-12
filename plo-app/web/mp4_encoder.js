@@ -20,6 +20,24 @@
       throw new Error('no frames to encode');
     }
 
+    // Resolution-aware bitrate: ~4 bits/pixel/frame keeps the felt's smooth
+    // gradients clean (low bitrate is what makes H.264 look grainy). Clamped to
+    // a sane band. Override via opts.bitrate.
+    const bitrate = opts.bitrate ||
+      Math.min(12_000_000, Math.max(4_000_000, Math.round(width * height * 4 * fps)));
+
+    // Prefer the strongest broadly-playable H.264 profile (High → Main →
+    // Baseline); High compresses far better at the same bitrate.
+    let codec = null;
+    for (const c of ['avc1.640028', 'avc1.4d0028', 'avc1.42001f']) {
+      try {
+        const s = await VideoEncoder.isConfigSupported(
+          { codec: c, width, height, bitrate, framerate: fps });
+        if (s && s.supported) { codec = c; break; }
+      } catch (e) { /* try next */ }
+    }
+    if (!codec) throw new Error('no supported H.264 config');
+
     const muxer = new Mp4Muxer.Muxer({
       target: new Mp4Muxer.ArrayBufferTarget(),
       video: { codec: 'avc', width: width, height: height },
@@ -33,11 +51,13 @@
       error: (e) => { encodeError = e; },
     });
     encoder.configure({
-      codec: 'avc1.42001f', // H.264 Baseline 3.1 — the most universally playable
+      codec: codec,
       width: width,
       height: height,
-      bitrate: 2_000_000,
+      bitrate: bitrate,
       framerate: fps,
+      // Offline export: let the encoder spend effort on quality, not latency.
+      latencyMode: 'quality',
       avc: { format: 'avc' }, // length-prefixed NALs + a decoder description for the muxer
     });
 

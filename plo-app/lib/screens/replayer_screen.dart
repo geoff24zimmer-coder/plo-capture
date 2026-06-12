@@ -236,13 +236,15 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
     );
   }
 
-  /// Step through every node and snapshot the felt boundary to RGBA frames.
-  Future<List<GifFrame>> _captureFrames() async {
+  /// Step through every node, snapshot the felt boundary, and normalise each
+  /// frame to [maxWidth] immediately — so a high-res capture never holds the
+  /// whole raw RGBA sequence in memory at once (matters on phones).
+  Future<List<GifFrame>> _captureFrames({required int maxWidth}) async {
     final boundary =
         _captureKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
     final n = _hand!.actions.length;
     final frames = <GifFrame>[];
-    const pixelRatio = 1.5; // supersample; normalizeFrames downscales to 500
+    const pixelRatio = 2.5; // supersample, then downscale → crisp text/cards
     for (var k = 0; k <= n; k++) {
       _goTo(k);
       // Let CanvasKit lay out and paint the new step before we snapshot it.
@@ -253,11 +255,10 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
       final bd = await im.toByteData(format: ui.ImageByteFormat.rawRgba);
       im.dispose();
       if (bd == null) continue;
-      frames.add(GifFrame(
-          w,
-          h,
-          Uint8List.fromList(
-              bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes))));
+      frames.add(normalizeFrame(
+          GifFrame(w, h,
+              bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes)),
+          maxWidth: maxWidth));
     }
     return frames;
   }
@@ -275,7 +276,8 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
         duration: const Duration(seconds: 45),
         content: Text('Rendering replay ${preferMp4 ? 'MP4' : 'GIF'}…')));
     try {
-      final frames = normalizeFrames(await _captureFrames(), maxWidth: 500);
+      // MP4 carries a higher resolution; GIF stays compact (256-colour anyway).
+      final frames = await _captureFrames(maxWidth: preferMp4 ? 720 : 500);
       Uint8List? bytes;
       var name = 'hand_replay.gif';
       var mime = 'image/gif';
@@ -287,7 +289,7 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
           name = 'hand_replay.mp4';
           mime = 'video/mp4';
         } catch (_) {
-          bytes = encodeReplayGif(frames); // runtime H.264 failure → GIF
+          bytes = encodeReplayGif(frames); // runtime H.264 failure → GIF (downscales)
         }
       } else {
         bytes = encodeReplayGif(frames);
@@ -299,10 +301,11 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
         return;
       }
       downloadBytes(name, bytes, mime);
-      final kb = (bytes.length / 1024).round();
+      final size = bytes.length >= 1024 * 1024
+          ? '${(bytes.length / (1024 * 1024)).toStringAsFixed(1)}MB'
+          : '${(bytes.length / 1024).round()}KB';
       messenger.showSnackBar(SnackBar(
-          content:
-              Text('Saved $name · ${frames.length} frames · ${kb}KB')));
+          content: Text('Saved $name · ${frames.length} frames · $size')));
     } catch (e) {
       messenger.hideCurrentSnackBar();
       messenger

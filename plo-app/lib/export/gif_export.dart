@@ -16,31 +16,35 @@ class GifFrame {
 /// (GIF has no real alpha; un-composited edges would otherwise fringe).
 const _bg = (0x0C, 0x0F, 0x0E);
 
-/// Normalise raw captured frames into a clip-ready set, shared by both the GIF
-/// and MP4 encoders: downscaled to [maxWidth], composited onto the felt
-/// background (opaque), and forced to EVEN width/height — H.264 rejects odd
-/// dimensions, and even frames are harmless for GIF. Returns RGBA frames.
-List<GifFrame> normalizeFrames(List<GifFrame> src, {int maxWidth = 500}) {
-  final out = <GifFrame>[];
-  for (final f in src) {
-    var im = img.Image.fromBytes(
-      width: f.width,
-      height: f.height,
-      bytes: f.rgba.buffer,
-      bytesOffset: f.rgba.offsetInBytes,
-      numChannels: 4,
-      order: img.ChannelOrder.rgba,
-    );
-    if (im.width > maxWidth) im = img.copyResize(im, width: maxWidth);
-    final ew = im.width - (im.width & 1);
-    final eh = im.height - (im.height & 1);
-    final canvas = img.Image(width: ew, height: eh)
-      ..clear(img.ColorRgb8(_bg.$1, _bg.$2, _bg.$3));
-    img.compositeImage(canvas, im); // clips the odd edge row/col if any
-    out.add(GifFrame(ew, eh, canvas.getBytes(order: img.ChannelOrder.rgba)));
+/// Normalise one raw captured frame into a clip-ready frame, shared by both the
+/// GIF and MP4 encoders: downscaled to [maxWidth] (cubic, for clean text),
+/// composited onto the felt background (opaque), and forced to EVEN
+/// width/height — H.264 rejects odd dimensions, and even frames are harmless
+/// for GIF. Done per-frame so a high-res capture never holds the whole raw
+/// sequence in memory at once.
+GifFrame normalizeFrame(GifFrame f, {int maxWidth = 500}) {
+  var im = img.Image.fromBytes(
+    width: f.width,
+    height: f.height,
+    bytes: f.rgba.buffer,
+    bytesOffset: f.rgba.offsetInBytes,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+  if (im.width > maxWidth) {
+    im = img.copyResize(im, width: maxWidth, interpolation: img.Interpolation.cubic);
   }
-  return out;
+  final ew = im.width - (im.width & 1);
+  final eh = im.height - (im.height & 1);
+  final canvas = img.Image(width: ew, height: eh)
+    ..clear(img.ColorRgb8(_bg.$1, _bg.$2, _bg.$3));
+  img.compositeImage(canvas, im); // clips the odd edge row/col if any
+  return GifFrame(ew, eh, canvas.getBytes(order: img.ChannelOrder.rgba));
 }
+
+/// Normalise a whole captured sequence (see [normalizeFrame]).
+List<GifFrame> normalizeFrames(List<GifFrame> src, {int maxWidth = 500}) =>
+    [for (final f in src) normalizeFrame(f, maxWidth: maxWidth)];
 
 /// Assemble a step-frame replay [frames] into an animated GIF (loops forever).
 /// Each frame is one replay node held for [stepCentis] hundredths of a second
