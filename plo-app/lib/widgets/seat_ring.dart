@@ -110,7 +110,14 @@ class SeatRing extends StatelessWidget {
               _stadiumPoint(theta(k), cx, cy, bandHw, bandHh)
           ];
           final btnPt = _stadiumPoint(btnTh, cx, cy, bandHw, bandHh);
-          final dealerPt = Offset.lerp(Offset(cx, cy), btnPt, 0.80)!;
+          // Dealer disk tucked beside the button seat: pulled onto the felt and
+          // offset tangentially toward the small-blind side, so it clears both
+          // the badge and the bet chips — which sit on the radial line directly
+          // in front of the seat (where the disk used to collide with them).
+          final btnRadial = Offset(math.cos(btnTh), math.sin(btnTh));
+          final btnTangent = Offset(-btnRadial.dy, btnRadial.dx);
+          final dealerPt =
+              btnPt - btnRadial * (seatD * 0.30) + btnTangent * (seatD * 0.82);
           // Hole cards (hero + any shown villains) ride just inboard of their
           // seat, on the felt, so they track the player. Hero is full opacity.
           final cardLayers = <({Offset pt, List<String> cards, bool hero})>[];
