@@ -49,13 +49,19 @@
       /* Stay above Flutter's view: once it boots it paints into <body> on top,
          so without this the minimum-hold would show the app, not the splash. */
       z-index: 2147483647;
-      transition: opacity 0.5s ease;
+      transition: opacity 0.55s ease-in-out;
     }
     #boot.hide { opacity: 0; }
     #boot video {
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; /* fill the screen; crop the overflow */
+      transition: opacity 0.45s ease-in, transform 0.6s ease-in;
     }
+    /* Handoff dips through black: the video dissolves into #boot's black
+       background (easing back slightly) before the black itself fades up to the
+       landing — a clean transition instead of crossfading two different logo
+       layouts (the video's centred logo vs the landing's smaller upper logo). */
+    #boot.dim video { opacity: 0; transform: scale(1.04); }
     /* Reduced motion (or no video support): static logo on black instead. */
     @media (prefers-reduced-motion: reduce) {
       #boot video { display: none; }
@@ -92,8 +98,11 @@
         if (done) return; done = true;
         var b = document.getElementById('boot');
         if (!b) return;
-        b.classList.add('hide');
-        setTimeout(function () { if (b) b.remove(); }, 520);
+        b.classList.add('dim'); // video dissolves into the black background
+        setTimeout(function () {
+          b.classList.add('hide'); // then the black fades up to the landing
+          setTimeout(function () { if (b) b.remove(); }, 580);
+        }, 430);
       }
       window.addEventListener('flutter-first-frame', function () {
         setTimeout(hide, Math.max(0, MIN_MS - (Date.now() - start)));
