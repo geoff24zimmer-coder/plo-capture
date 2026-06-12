@@ -46,6 +46,9 @@
     html, body { margin: 0; padding: 0; background-color: #000; }
     #boot {
       position: fixed; inset: 0; background-color: #000;
+      /* Stay above Flutter's view: once it boots it paints into <body> on top,
+         so without this the minimum-hold would show the app, not the splash. */
+      z-index: 2147483647;
       transition: opacity 0.5s ease;
     }
     #boot.hide { opacity: 0; }
