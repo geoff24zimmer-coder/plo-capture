@@ -23,10 +23,11 @@ external JSAny? get _videoEncoder;
 bool mp4ExportAvailable() => _encoderFn != null && _videoEncoder != null;
 
 /// Encode [frames] (even-sized RGBA, e.g. from [normalizeFrames]) into an MP4 at
-/// [fps]. Throws if WebCodecs/H.264 fails at runtime — callers should catch and
-/// fall back to GIF.
+/// [fps]. Default 1 fps = 1 second per step (1× pace), the readable default for
+/// a shared clip. Throws if WebCodecs/H.264 fails at runtime — callers should
+/// catch and fall back to GIF.
 Future<Uint8List> encodeReplayMp4(List<GifFrame> frames,
-    {double fps = 2}) async {
+    {double fps = 1}) async {
   final opts = JSObject()
     ..setProperty('width'.toJS, frames.first.width.toJS)
     ..setProperty('height'.toJS, frames.first.height.toJS)

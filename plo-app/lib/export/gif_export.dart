@@ -48,12 +48,13 @@ List<GifFrame> normalizeFrames(List<GifFrame> src, {int maxWidth = 500}) =>
 
 /// Assemble a step-frame replay [frames] into an animated GIF (loops forever).
 /// Each frame is one replay node held for [stepCentis] hundredths of a second
-/// ([lastCentis] for the final frame so the result lingers), downscaled to
-/// [maxWidth] for a sane file size. Returns the GIF bytes, or null if empty.
+/// (default 100 = 1 second per step, a 1× pace; [lastCentis] for the final
+/// frame so the result lingers), downscaled to [maxWidth] for a sane file size.
+/// Returns the GIF bytes, or null if empty.
 Uint8List? encodeReplayGif(
   List<GifFrame> frames, {
   int maxWidth = 500,
-  int stepCentis = 65,
+  int stepCentis = 100,
   int lastCentis = 250,
 }) {
   if (frames.isEmpty) return null;

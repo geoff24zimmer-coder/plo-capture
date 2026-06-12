@@ -286,7 +286,7 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
         try {
           // Repeat the final frame so the result lingers a beat.
           final padded = [...frames, frames.last, frames.last, frames.last];
-          bytes = await encodeReplayMp4(padded, fps: 2);
+          bytes = await encodeReplayMp4(padded, fps: 1); // 1× pace: 1s per step
           name = 'hand_replay.mp4';
           mime = 'video/mp4';
         } catch (_) {
