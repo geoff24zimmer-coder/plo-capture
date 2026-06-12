@@ -4,20 +4,26 @@ import '../plo_engine.dart';
 import '../util.dart';
 import 'card_picker.dart' show suitColor, suitGlyph;
 
-/// Point on a stadium (rounded-rect with semicircular caps of radius == [hh])
-/// at parametric angle [t], in pixel coords. Seats ride this curve so they all
-/// sit ON the gold rail of the wide table — an ellipse would cut the corners.
+/// Point on a stadium (rounded-rect with semicircular caps) at parametric angle
+/// [t], in pixel coords. Seats ride this curve so they all sit ON the gold rail
+/// — an ellipse would cut the corners. Works for either orientation: caps on
+/// the left/right when [hw] >= [hh] (wide table), or on the top/bottom when
+/// [hh] > [hw] (tall/vertical racetrack); the cap radius is min(hw, hh).
 Offset _stadiumPoint(double t, double cx, double cy, double hw, double hh) {
   final dx = math.cos(t), dy = math.sin(t);
-  final straight = (hw - hh).clamp(0.0, hw); // half-length of the flat top/bottom
+  final horiz = hw >= hh;
+  final r = math.min(hw, hh); // cap radius
+  final half = (horiz ? hw - hh : hh - hw); // half-length of the straight side
   final sx = dx.abs() < 1e-6 ? double.infinity : hw / dx.abs();
   final sy = dy.abs() < 1e-6 ? double.infinity : hh / dy.abs();
   var s = math.min(sx, sy); // rectangle boundary
-  if ((dx * s).abs() > straight) {
-    // in a cap: intersect the ray with the cap circle at (±straight, 0), r = hh
-    final c = (dx < 0 ? -1.0 : 1.0) * straight;
-    final b = dx * c;
-    final disc = b * b - (c * c - hh * hh);
+  final inCap = horiz ? (dx * s).abs() > half : (dy * s).abs() > half;
+  if (inCap) {
+    // Cap circle centred along the straight axis; intersect the ray with it.
+    final ccx = horiz ? (dx < 0 ? -half : half) : 0.0;
+    final ccy = horiz ? 0.0 : (dy < 0 ? -half : half);
+    final b = dx * ccx + dy * ccy; // dir is unit → = dot(dir, capCentre)
+    final disc = b * b - (ccx * ccx + ccy * ccy - r * r);
     if (disc >= 0) s = b + math.sqrt(disc);
   }
   return Offset(cx + dx * s, cy + dy * s);
@@ -95,11 +101,11 @@ class SeatRing extends StatelessWidget {
 
     return Center(
       child: AspectRatio(
-        aspectRatio: 1.9,
+        aspectRatio: 0.72, // tall/vertical racetrack — fills the portrait area
         child: LayoutBuilder(builder: (ctx, c) {
           final tableW = c.maxWidth;
           final tableH = c.maxHeight;
-          final seatD = (tableW * 0.092).clamp(32.0, 48.0);
+          final seatD = (tableW * 0.10).clamp(34.0, 52.0);
           final btnTh = theta(btnIdx);
           // Rail-band centre radii (between the felt edge and the rail's outer
           // edge), in px — seats are centred here so they straddle the gold.
@@ -195,26 +201,26 @@ class SeatRing extends StatelessWidget {
                   ),
                 ),
               ),
-              // ---- flanking emblems (logo floats on the felt; bg is transparent)
-              for (final dx in const [-0.5, 0.5])
-                Align(
-                  alignment: Alignment(dx, 0),
-                  child: Opacity(
-                    opacity: 0.7,
-                    child: Image.asset('assets/emblem.png',
-                        width: tableW * 0.15),
-                  ),
+              // ---- felt-logo watermark in the centre, like a real table; the
+              // pot and cards sit on top of it (bg is transparent)
+              Align(
+                alignment: const Alignment(0, -0.05),
+                child: Opacity(
+                  opacity: 0.30,
+                  child:
+                      Image.asset('assets/emblem.png', width: tableW * 0.52),
                 ),
+              ),
               // ---- community board across the centre of the felt
               if (board.isNotEmpty)
                 Align(
-                  alignment: const Alignment(0, -0.22),
+                  alignment: const Alignment(0, -0.16),
                   child: _HoleCards(cards: board, cardW: seatD * 0.5),
                 ),
               // ---- pot + SPR; drops below the board once one is dealt
               if (!selecting)
                 Align(
-                  alignment: Alignment(0, board.isEmpty ? 0 : 0.32),
+                  alignment: Alignment(0, board.isEmpty ? 0 : 0.20),
                   child: _PotPill(pot: engine.pot, spr: _spr()),
                 ),
               // ---- chips in front of each seat that has committed this street;
@@ -224,8 +230,10 @@ class SeatRing extends StatelessWidget {
                   if (!engine.players[seats[k]]!.folded &&
                       engine.players[seats[k]]!.streetCommit > 0)
                   Align(
-                    alignment: Alignment(
-                        math.cos(theta(k)) * 0.66, math.sin(theta(k)) * 0.62),
+                    // Anchor off the seat's actual point (like the hole cards)
+                    // so chips sit in front of each seat at any table shape.
+                    alignment: Alignment((seatPts[k].dx - cx) / cx * 0.78,
+                        (seatPts[k].dy - cy) / cy * 0.78),
                     child: _BetChips(
                       seat: seats[k],
                       amount: engine.players[seats[k]]!.streetCommit,
