@@ -244,7 +244,7 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
         _captureKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
     final n = _hand!.actions.length;
     final frames = <GifFrame>[];
-    const pixelRatio = 2.5; // supersample, then downscale → crisp text/cards
+    const pixelRatio = 3.0; // capture ≥1080px wide on phones, then downscale
     for (var k = 0; k <= n; k++) {
       _goTo(k);
       // Let CanvasKit lay out and paint the new step before we snapshot it.
@@ -276,8 +276,9 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
         duration: const Duration(seconds: 45),
         content: Text('Rendering replay ${preferMp4 ? 'MP4' : 'GIF'}…')));
     try {
-      // MP4 carries a higher resolution; GIF stays compact (256-colour anyway).
-      final frames = await _captureFrames(maxWidth: preferMp4 ? 720 : 500);
+      // MP4 carries full resolution (1080p, never upscaled past the capture);
+      // GIF stays compact (256-colour anyway).
+      final frames = await _captureFrames(maxWidth: preferMp4 ? 1080 : 500);
       Uint8List? bytes;
       var name = 'hand_replay.gif';
       var mime = 'image/gif';
