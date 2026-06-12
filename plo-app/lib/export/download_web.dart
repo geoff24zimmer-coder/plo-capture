@@ -25,6 +25,10 @@ void downloadZip(String filename, Map<String, String> files) {
 void downloadText(String filename, String contents) =>
     _save(filename, contents.toJS, 'application/json');
 
+/// Download raw bytes (e.g. the rendered replay GIF) with an explicit mime.
+void downloadBytes(String filename, Uint8List bytes, String mime) =>
+    _save(filename, bytes.toJS, mime);
+
 void _save(String filename, JSAny blobPart, String mime) {
   final blob = web.Blob([blobPart].toJS, web.BlobPropertyBag(type: mime));
   final url = web.URL.createObjectURL(blob);

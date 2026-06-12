@@ -73,6 +73,11 @@
       if (b) b.remove();
     });
   </script>
+  <!-- In-browser MP4 export for shared replay clips (WebCodecs + vendored
+       mp4-muxer). Classic scripts: they define the global `Mp4Muxer` and
+       `window.ploEncodeMp4` before any user-triggered export calls them. -->
+  <script src="mp4-muxer.min.js"></script>
+  <script src="mp4_encoder.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
