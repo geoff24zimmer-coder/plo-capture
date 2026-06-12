@@ -38,26 +38,80 @@
   <link rel="manifest" href="manifest.json">
 
   <style>
-    /* Dark splash that matches the app's scaffold colour, so the screen is
-       never white while Flutter boots (especially noticeable as an installed
-       PWA on a cold start). Removed automatically once Flutter takes over. */
+    /* Animated launch splash, shown while Flutter/wasm downloads and boots
+       (so the motion covers real load time), then crossfaded out once Flutter's
+       first frame is up. Pure CSS over the transparent logo — the gold sheen is
+       masked to the logo shape so it only shimmers across the badge. Black bg
+       matches the landing screen for a seamless handoff. */
     html, body { margin: 0; padding: 0; background-color: #000; }
     #boot {
       position: fixed; inset: 0; display: flex; align-items: center;
       justify-content: center; background-color: #000;
+      transition: opacity 0.4s ease;
     }
-    #boot img {
-      width: min(72vw, 360px); height: auto;
-      animation: bootpulse 1.8s ease-in-out infinite;
+    #boot.hide { opacity: 0; }
+
+    .boot-wrap { position: relative; width: min(72vw, 340px); }
+    .boot-wrap img {
+      width: 100%; height: auto; display: block;
+      animation: bootrise 0.8s cubic-bezier(.2,.7,.2,1) both,
+                 bootglow 3s ease-in-out 0.8s infinite;
     }
-    @keyframes bootpulse {
-      0%, 100% { opacity: 0.78; }
-      50% { opacity: 1; }
+
+    /* Gold sheen, clipped to the logo's alpha so it travels only over the art. */
+    .boot-shimmer {
+      position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+      -webkit-mask: url(logo.png) center / 100% 100% no-repeat;
+              mask: url(logo.png) center / 100% 100% no-repeat;
+    }
+    .boot-shimmer::after {
+      content: ''; position: absolute; top: -25%; bottom: -25%; width: 34%;
+      left: -60%; transform: skewX(-12deg); filter: blur(7px);
+      mix-blend-mode: screen;
+      background: linear-gradient(100deg, transparent,
+                  rgba(255,241,205,.65), transparent);
+      animation: bootsweep 3.4s ease-in-out 1s infinite;
+    }
+
+    .spark {
+      position: absolute; width: 3px; height: 3px; border-radius: 50%;
+      background: #ffe9b0; box-shadow: 0 0 7px 1px rgba(255,210,130,.9);
+      opacity: 0;
+    }
+    .s1 { left: 30%; bottom: 24%; animation: bootspark 2.8s ease-in 1.2s infinite; }
+    .s2 { left: 52%; bottom: 20%; animation: bootspark 2.8s ease-in 1.9s infinite; }
+    .s3 { left: 68%; bottom: 26%; animation: bootspark 2.8s ease-in 1.5s infinite; }
+    .s4 { left: 44%; bottom: 31%; animation: bootspark 2.8s ease-in 2.4s infinite; }
+
+    @keyframes bootrise {
+      from { opacity: 0; transform: translateY(12px) scale(.94); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes bootglow {
+      0%, 100% { filter: drop-shadow(0 0 6px rgba(212,175,55,.22)); }
+      50%      { filter: drop-shadow(0 0 24px rgba(212,175,55,.5)); }
+    }
+    @keyframes bootsweep { 0% { left: -60%; } 55%, 100% { left: 150%; } }
+    @keyframes bootspark {
+      0%   { opacity: 0; transform: translateY(0) scale(.5); }
+      18%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-54px) scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .boot-wrap img { animation: none; }
+      .boot-shimmer, .spark { display: none; }
     }
   </style>
 </head>
 <body>
-  <div id="boot"><img src="logo.png" alt="The PLO Show — Hand History"></div>
+  <div id="boot">
+    <div class="boot-wrap">
+      <img src="logo.png" alt="The PLO Show — Hand History">
+      <div class="boot-shimmer"></div>
+      <span class="spark s1"></span><span class="spark s2"></span>
+      <span class="spark s3"></span><span class="spark s4"></span>
+    </div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -67,10 +121,12 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script>
-    // Drop the boot splash once Flutter's first frame is up.
+    // Crossfade the boot splash out once Flutter's first frame is up.
     window.addEventListener('flutter-first-frame', function () {
       var b = document.getElementById('boot');
-      if (b) b.remove();
+      if (!b) return;
+      b.classList.add('hide');
+      setTimeout(function () { b.remove(); }, 420);
     });
   </script>
   <!-- In-browser MP4 export for shared replay clips (WebCodecs + vendored
