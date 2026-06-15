@@ -130,21 +130,21 @@ class SeatRing extends StatelessWidget {
               btnPt - btnRadial * (seatD * 0.30) + btnTangent * (seatD * 0.82);
           // Hole cards (hero + any shown villains) ride just inboard of their
           // seat, on the felt, so they track the player. Hero is full opacity.
-          final cardLayers = <({Offset pt, List<String> cards, bool hero})>[];
-          void addCards(int? seat, List<String> cards, bool hero) {
+          final cardLayers = <({Offset pt, List<String> cards})>[];
+          void addCards(int? seat, List<String> cards) {
             if (seat == null || cards.isEmpty) return;
             final i = seats.indexOf(seat);
             if (i < 0) return;
             cardLayers.add((
               pt: Offset.lerp(seatPts[i], Offset(cx, cy), 0.30)!,
               cards: cards,
-              hero: hero,
             ));
           }
 
-          addCards(heroSeat, heroCards, true);
+          // Villain shown cards ride in front of their seats (radial, small).
+          // The hero's hand is drawn separately, big and centre-low.
           for (final e in shownCards.entries) {
-            addCards(e.key, e.value, false);
+            addCards(e.key, e.value);
           }
 
           return Stack(
@@ -276,19 +276,25 @@ class SeatRing extends StatelessWidget {
                     ),
                   ),
                 ),
-              // ---- hole cards on the felt in front of each revealed seat
+              // ---- villain shown cards on the felt in front of each revealed
+              // seat (MTT showdown). Small; the hero's hand is shown separately.
               for (final cl in cardLayers)
                 Align(
                   alignment:
                       Alignment((cl.pt.dx - cx) / cx, (cl.pt.dy - cy) / cy),
                   child: Opacity(
-                    opacity: cl.hero ? 1.0 : 0.82,
-                    // Hero's hand is the focal point — slightly larger than
-                    // shown villain cards, but still under the board (0.50).
-                    child: _HoleCards(
-                        cards: cl.cards,
-                        cardW: seatD * (cl.hero ? 0.48 : 0.42)),
+                    opacity: 0.82,
+                    child: _HoleCards(cards: cl.cards, cardW: seatD * 0.42),
                   ),
+                ),
+              // ---- hero's four hole cards: a big, fixed display low-centre on
+              // the felt — the focal point of capture. Pinned to centre so it
+              // never overlaps the radial bet chips (which hug the seats), and
+              // sized ~3x the old in-front-of-seat cards for at-a-glance reading.
+              if (heroSeat != null && heroCards.isNotEmpty)
+                Align(
+                  alignment: const Alignment(0, 0.46),
+                  child: _HoleCards(cards: heroCards, cardW: seatD * 1.5),
                 ),
             ],
           );
