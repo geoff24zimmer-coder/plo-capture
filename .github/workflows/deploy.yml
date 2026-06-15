@@ -44,10 +44,13 @@ jobs:
           # no manual repo-settings toggle.
           enablement: true
 
-      # Project Pages serve under /<repo>/, so the app must be built with a
-      # matching base-href or asset paths 404.
+      # Served from a custom domain (hands.theploshow.com) at the root path, so
+      # base-href is "/". (On the old project-Pages URL this had to be
+      # "/<repo>/"; that URL stops working once we move to the apex of the
+      # subdomain — assets would 404 there. The CNAME file in web/ pins the
+      # custom domain into the published artifact.)
       - name: Build web
-        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+        run: flutter build web --release --base-href "/"
 
       - uses: actions/upload-pages-artifact@v5
         with:
