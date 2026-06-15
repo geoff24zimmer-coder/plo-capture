@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../plo_engine.dart';
 import '../util.dart';
-import 'card_picker.dart' show suitColor, suitGlyph;
+import 'card_picker.dart' show CardFace;
 
 /// Point on a stadium (rounded-rect with semicircular caps) at parametric angle
 /// [t], in pixel coords. Seats ride this curve so they all sit ON the gold rail
@@ -291,10 +291,13 @@ class SeatRing extends StatelessWidget {
               // the felt — the focal point of capture. Pinned to centre so it
               // never overlaps the radial bet chips (which hug the seats), and
               // sized ~3x the old in-front-of-seat cards for at-a-glance reading.
+              // Hero's hand sits in the chip-free centre zone (bet chips hug the
+              // outer ring), just below the pot. Drops lower when a board is
+              // out, mirroring the pot pill, so the two never stack up.
               if (heroSeat != null && heroCards.isNotEmpty)
                 Align(
-                  alignment: const Alignment(0, 0.46),
-                  child: _HoleCards(cards: heroCards, cardW: seatD * 1.5),
+                  alignment: Alignment(0, board.isEmpty ? 0.3 : 0.5),
+                  child: _HoleCards(cards: heroCards, cardW: seatD * 1.1),
                 ),
             ],
           );
@@ -520,31 +523,9 @@ class _HoleCards extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final c in cards)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 1.1),
-              width: cardW,
-              height: cardW * 1.42,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xF21A1E1B),
-                borderRadius: BorderRadius.circular(cardW * 0.2),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.28), width: 0.6),
-                boxShadow: const [
-                  BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 2.5,
-                      offset: Offset(0, 1)),
-                ],
-              ),
-              child: Text(
-                '${c[0]}${suitGlyph(c[1])}',
-                style: TextStyle(
-                    fontSize: cardW * 0.6,
-                    height: 1.0,
-                    fontWeight: FontWeight.w800,
-                    color: suitColor(c[1])),
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1.1),
+              child: CardFace(c, width: cardW),
             ),
         ],
       ),
