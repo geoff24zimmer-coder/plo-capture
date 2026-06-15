@@ -73,10 +73,14 @@ cd build/web && python3 -m http.server 8000   # then open http://localhost:8000
 - **Custom domain `hands.theploshow.com`:**
   - Squarespace → `theploshow.com` → DNS → add
     `CNAME  hands → geoff24zimmer-coder.github.io`.
-  - GitHub repo → Settings → Pages → Custom domain → `hands.theploshow.com`
-    → Save, then tick **Enforce HTTPS** once the cert provisions (minutes–1h).
-  - The `plo-app/web/CNAME` file makes this survive every deploy; if the
-    domain ever "unsets" itself after a build, that file is missing.
+  - GitHub repo → Settings → Pages → Custom domain → type
+    `hands.theploshow.com` → Save, then tick **Enforce HTTPS** once the cert
+    provisions (minutes–1h). **This step is required** — because the deploy
+    source is *GitHub Actions* (not "deploy from a branch"), the `CNAME` file
+    in the artifact does NOT auto-register the domain; you must set it here in
+    the UI. Until you do, the site returns "Site not found".
+  - `plo-app/web/CNAME` is still kept so the domain survives if the source is
+    ever switched to branch-deploy, and as in-repo documentation of the domain.
 - **Push auth:** a classic Personal Access Token with **`repo` + `workflow`**
   scopes (the `workflow` scope is required because the repo contains a
   workflow file).
