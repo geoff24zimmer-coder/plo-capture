@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: letter; margin: 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1c1f22; font-size: 11pt; line-height: 1.5; margin: 0;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .hero { text-align: center; margin: 0 0 6px; }
+  .hero img { width: 200px; height: auto; }
+  h1 { font-size: 20pt; margin: 4px 0 2px; letter-spacing: .2px; }
+  .sub { color: #5b6266; font-size: 10.5pt; margin: 0 0 4px; }
+  .url { color: #0f9d63; font-weight: 700; font-size: 10.5pt; }
+  h2 {
+    font-size: 13pt; margin: 18px 0 8px; padding-left: 10px;
+    border-left: 5px solid #10B981; line-height: 1.25;
+  }
+  p { margin: 6px 0; }
+  ol, ul { margin: 6px 0 6px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .tag {
+    display: inline-block; font-weight: 700; font-size: 9.5pt;
+    padding: 1px 7px; border-radius: 5px; white-space: nowrap;
+  }
+  .green { background:#e6f7ef; color:#0f7a4d; }
+  .gold  { background:#f7efd6; color:#8a6d12; }
+  .red   { background:#fbe7e7; color:#b23b3a; }
+  .key { font-weight:700; color:#1c1f22; }
+  .callout {
+    border: 1.5px solid #C9A536; background: #fcf7e8;
+    border-radius: 10px; padding: 12px 14px; margin: 12px 0;
+  }
+  .callout .h { font-weight: 800; color:#8a6d12; font-size: 11pt; margin-bottom:2px; }
+  .two { display:flex; gap:14px; }
+  .two > div { flex:1; border:1px solid #e2e5e7; border-radius:10px; padding:10px 12px; }
+  .two h3 { margin:0 0 4px; font-size:11pt; }
+  .muted { color:#5b6266; }
+  .foot { margin-top:16px; padding-top:8px; border-top:1px solid #e2e5e7;
+           color:#5b6266; font-size:9.5pt; }
+  .nobreak { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+  <div class="hero">
+    <img src="plo-app/web/logo.png" alt="The PLO Show — Hand History">
+    <h1>Hand History — Quick Start</h1>
+    <p class="sub">Fast, discreet capture of live 4-card PLO hands. Cash &amp; tournament.</p>
+    <p><span class="url">hands.theploshow.com</span></p>
+  </div>
+
+  <div class="callout nobreak">
+    <div class="h">★ The one thing that works differently</div>
+    You do <span class="key">not</span> pick your seat first. You replay the table's action
+    <span class="key">in order</span> — starting with the first player to act — tapping what each
+    player did. When the amber pointer reaches your spot, tap
+    <span class="tag gold">This is me — [position]</span> and enter your four cards. That's the whole trick.
+  </div>
+
+  <h2>Log your first hand</h2>
+  <ol class="nobreak">
+    <li>On the home screen tap <span class="tag green">Cash Game</span> (or
+        <span class="tag gold">Tournament</span>). Enter the venue, blinds, and table size, then <b>Start</b>.</li>
+    <li>On <b>New hand</b>, the blinds and stacks are pre-filled (100bb by default). For cash, pick a
+        straddle if there was one — <b>No&nbsp;straddle / UTG / Button</b> — then tap <b>Start hand</b>.</li>
+    <li>The table appears with an <b>amber pointer</b> on the player to act. Tap what they did —
+        <b>Fold</b>, <b>Call</b>, or <b>Raise</b> — going around the table. The app only offers the
+        legal pot-limit options, so you can't mis-enter a raise size.</li>
+    <li>When the pointer reaches your seat, tap <span class="tag gold">This is me — [position]</span>
+        and pick your four cards.</li>
+    <li>When the hand resolves, tap <b>Save hand</b>. You're dropped back on a fresh setup for the next one.</li>
+  </ol>
+
+  <h2>Cash vs. Tournament — they capture differently</h2>
+  <div class="two nobreak">
+    <div>
+      <h3><span class="tag green">Cash</span> &nbsp;Preflop only</h3>
+      <p class="muted">A cash hand ends at the flop — no board, no showdown. This is intentional:
+      it records the preflop tree the solver studies. If it "stops early," that's correct.</p>
+    </div>
+    <div>
+      <h3><span class="tag gold">Tournament</span> &nbsp;Full hand</h3>
+      <p class="muted">Plays out completely. You're prompted for the flop, turn, and river cards as
+      the streets come, then tap the <b>winning seat</b> at showdown. Level, ante, and players-left
+      are captured too (for ICM later).</p>
+    </div>
+  </div>
+
+  <h2>Handy controls</h2>
+  <ul class="nobreak">
+    <li><span class="key">Undo</span> (top-right ↶) — removes the last action you entered.</li>
+    <li><span class="key">$ / BB</span> toggle (top-right) — show bets in money or in big blinds.</li>
+    <li><span class="key">Save spot</span> — once the action reaches you, bank just your decision
+        point mid-hand (for solver review) instead of playing it out.</li>
+    <li><span class="key">Flag for review</span> — star a hand to find it again later.</li>
+  </ul>
+
+  <h2>After the hand</h2>
+  <ul class="nobreak">
+    <li><span class="key">Hand list</span> — every hand with your net result
+        (<span style="color:#0f9d63;font-weight:700">green&nbsp;up</span> /
+        <span style="color:#b23b3a;font-weight:700">red&nbsp;down</span>). Tap one to <b>replay</b> it
+        on the animated table.</li>
+    <li><span class="key">Share / save a replay</span> — in the replayer, share a hand as a link
+        (it replays on any phone, no app needed) or <b>Download an MP4/GIF clip</b> to post.</li>
+    <li><span class="key">⋮ on a hand</span> → Export for review, or Delete (long-press also deletes).</li>
+    <li><span class="key">Export for solver</span> (top-right ⬆) — bundles the session's hands for the
+        Monker&nbsp;Killer solver.</li>
+    <li><span class="key">End</span> — closes out the session; it stays available under <b>Past sessions</b>.</li>
+  </ul>
+
+  <h2>The end game — your hands feed the solver</h2>
+  <div class="callout nobreak">
+    <div class="h">★ Why you’re capturing</div>
+    Every hand you log is <span class="key">solver-ready</span>. The point isn’t just a tidy history —
+    it’s to drop your <span class="key">real</span> spots into a PLO solver and get back optimal
+    strategy for the exact situations you face at your table. Two paths:
+    <ul style="margin-top:6px;margin-bottom:4px">
+      <li><span class="key">Export for solver</span> (a session’s ⬆ button) bundles your completed
+          hands into population frequencies the solver reads.</li>
+      <li><span class="key">Save spot → Copy spot JSON</span> sends a single decision straight into
+          the solver’s <b>Import Hand</b> for a one-off GTO answer.</li>
+    </ul>
+    Capture now, solve later — the data is built to load in directly, with no re-entry.
+  </div>
+
+  <h2>Install it on your phone</h2>
+  <p class="nobreak">Open <span class="url">hands.theploshow.com</span> in <b>Safari</b> (iPhone) or
+  <b>Chrome</b> (Android) → <b>Share / ⋮ → Add to Home Screen</b>. It launches full-screen like a
+  native app.</p>
+
+  <div class="foot nobreak">
+    Goal: a logged hand takes about <b>15 seconds</b> of quiet tapping. &nbsp;·&nbsp;
+    Your hands are stored <b>on that device</b> — there's no login or cloud sync yet, so clearing the
+    browser's data clears the hands. Use the share link or MP4 export to keep any you care about.
+  </div>
+
+</body>
+</html>
