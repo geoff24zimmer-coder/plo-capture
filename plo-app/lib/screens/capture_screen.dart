@@ -6,6 +6,7 @@ import '../hand_recorder.dart';
 import '../util.dart';
 import '../models/session.dart';
 import '../db/hand_store.dart';
+import '../onboarding.dart';
 import '../widgets/seat_ring.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/card_picker.dart';
@@ -44,6 +45,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
   void initState() {
     super.initState();
     chipMode = _isMtt;
+    // First-run walkthrough: take a brand-new user through the whole capture
+    // flow once (no-op after they've seen it). Deferred a frame so the dialog
+    // mounts over a built screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybeShowFirstRunGuide(context);
+    });
   }
   static const int _nPlayers = 8; // 8-max only — see CLAUDE.md
   static const int _buttonSeat = 1; // a fixed reference seat, anchored bottom
@@ -448,6 +455,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
               onPressed: _applied.isEmpty ? null : _undo,
             ),
           ],
+          IconButton(
+            tooltip: 'How to log a hand',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => showCaptureGuide(context),
+          ),
         ],
       ),
       body: SafeArea(
