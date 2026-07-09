@@ -216,7 +216,7 @@ class SeatRing extends StatelessWidget {
               if (board.isNotEmpty)
                 Align(
                   alignment: const Alignment(0, -0.16),
-                  child: _HoleCards(cards: board, cardW: seatD * 0.68),
+                  child: _HoleCards(cards: board, cardW: seatD * 0.78),
                 ),
               // ---- pot + SPR; drops below the board once one is dealt
               if (!selecting)
@@ -226,10 +226,14 @@ class SeatRing extends StatelessWidget {
                 ),
               // ---- chips in front of each seat that has committed this street;
               // they animate out from the seat so the recreation is visible.
+              // Skip a seat whose cards we're showing at showdown — the shown
+              // cards own that seat's felt zone (the pot pill has the total), so
+              // chips would overlap the revealed hand.
               if (!selecting)
                 for (var k = 0; k < n; k++)
                   if (!engine.players[seats[k]]!.folded &&
-                      engine.players[seats[k]]!.streetCommit > 0)
+                      engine.players[seats[k]]!.streetCommit > 0 &&
+                      !shownCards.containsKey(seats[k]))
                   Align(
                     // Anchor off the seat's actual point (like the hole cards)
                     // so chips sit in front of each seat at any table shape.
