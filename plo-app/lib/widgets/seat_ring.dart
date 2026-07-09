@@ -216,7 +216,7 @@ class SeatRing extends StatelessWidget {
               if (board.isNotEmpty)
                 Align(
                   alignment: const Alignment(0, -0.16),
-                  child: _HoleCards(cards: board, cardW: seatD * 0.5),
+                  child: _HoleCards(cards: board, cardW: seatD * 0.68),
                 ),
               // ---- pot + SPR; drops below the board once one is dealt
               if (!selecting)
@@ -284,7 +284,7 @@ class SeatRing extends StatelessWidget {
                       Alignment((cl.pt.dx - cx) / cx, (cl.pt.dy - cy) / cy),
                   child: Opacity(
                     opacity: 0.82,
-                    child: _HoleCards(cards: cl.cards, cardW: seatD * 0.42),
+                    child: _HoleCards(cards: cl.cards, cardW: seatD * 0.56),
                   ),
                 ),
               // ---- hero's four hole cards: a big, fixed display low-centre on
