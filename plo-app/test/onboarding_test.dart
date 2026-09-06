@@ -31,7 +31,7 @@ void main() {
       '1 · Set up the hand',
       '2 · Replay the action in order',
       '3 · Claim your seat — the one trick',
-      '4 · Cash vs. Tournament',
+      '4 · Play the hand out',
       '5 · Save it',
     ]) {
       await tester.tap(find.text('Next'));
@@ -47,7 +47,7 @@ void main() {
     await tester.tap(find.text('Back'));
     await tester.pumpAndSettle();
     expect(find.text('5 · Save it'), findsNothing);
-    expect(find.text('4 · Cash vs. Tournament'), findsOneWidget);
+    expect(find.text('4 · Play the hand out'), findsOneWidget);
 
     // The final button dismisses the dialog.
     await tester.tap(find.text('Next'));

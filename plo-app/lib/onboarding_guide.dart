@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 /// The first-run walkthrough widget — a short, dismissible sequence of cards
 /// that takes a brand-new user start-to-finish through logging one hand, with
-/// the two genuinely non-obvious mechanics (you claim your seat mid-action;
-/// cash is preflop-only) called out explicitly.
+/// the genuinely non-obvious mechanic (you claim your seat mid-action) called
+/// out explicitly.
 ///
 /// Pure Flutter (no platform glue) so it renders in widget tests. The
 /// "show once" plumbing + the localStorage seen-flag live in onboarding.dart.
@@ -57,13 +57,13 @@ final List<_Step> _steps = [
     _b('“This is me”'),
     _t(' and choose your four cards. That’s the whole trick.'),
   ]),
-  _Step(Icons.casino, _green, '4 · Cash vs. Tournament', [
-    _t('Cash captures '),
-    _b('preflop only'),
-    _t(' — it ends at the flop, on purpose. Tournaments play out fully: you’ll '
-        'add the flop, turn, and river, then '),
+  _Step(Icons.casino, _green, '4 · Play the hand out', [
+    _t('Every hand plays out fully — cash and tournament. As each street '
+        'opens you’ll pick the '),
+    _b('flop, turn, and river'),
+    _t(' cards, then '),
     _b('tap the winning seat'),
-    _t('.'),
+    _t(' at showdown. Didn’t see a card? Cancel the picker and keep going.'),
   ]),
   _Step(Icons.check_circle, _goldLight, '5 · Save it', [
     _t('Tap '),

@@ -68,7 +68,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   DateTime? _dealTime;
   final List<({int seat, ActionType type, int? amount})> _applied = [];
 
-  // ---- full-hand (MTT only) board + showdown state
+  // ---- full-hand board + showdown state
   List<String> _flop = [];
   String? _turn;
   String? _river;
@@ -201,7 +201,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
     final e = _engine;
     if (_phase != _Phase.result || e == null) return false;
     if (_heroSeat == null) return true; // claim the seat the hand was logged from
-    if (!_isMtt) return false;
     if (_addingShown) return true; // entering villain shown cards
     return e.status == HandStatus.showdown && _winnerSeat == null; // pick winner
   }
@@ -212,7 +211,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
       _claimHeroAt(seat);
       return;
     }
-    if (!_isMtt) return;
     if (_addingShown) {
       _enterShownCards(seat);
       return;
@@ -253,33 +251,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
       return;
     }
     setState(() {});
-    if (_isMtt) {
-      await _advanceMtt();
-    } else {
-      _checkPreflopOver();
-    }
+    await _advanceHand();
   }
 
-  /// Cash capture is preflop-only: end the hand the moment the preflop round
-  /// closes — decided by folds, an all-in run-out, or the action reaching a
-  /// flop. No board, no showdown. A winner is recorded only on a fold-out.
-  void _checkPreflopOver() {
-    final e = _engine!;
-    final preflopOver =
-        e.status != HandStatus.acting || e.street != Street.preflop;
-    if (!preflopOver) return;
-    setState(() {
-      _phase = _Phase.result;
-      _winnerSeat =
-          e.status == HandStatus.wonByFold ? e.activeSeats.first : null;
-    });
-  }
-
-  /// MTT capture plays the whole hand. After each action: if it folded out,
-  /// finish; if a new street opened, prompt for that street's board cards; if
-  /// it reached showdown (incl. an all-in run-out), deal any remaining board
-  /// and move to winner selection.
-  Future<void> _advanceMtt() async {
+  /// Capture plays the whole hand, cash and MTT alike. After each action: if
+  /// it folded out, finish; if a new street opened, prompt for that street's
+  /// board cards; if it reached showdown (incl. an all-in run-out), deal any
+  /// remaining board and move to winner selection.
+  Future<void> _advanceHand() async {
     final e = _engine!;
     if (e.status == HandStatus.wonByFold) {
       setState(() {
@@ -673,7 +652,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       );
     }
     final wonByFold = e.status == HandStatus.wonByFold;
-    final isShowdown = _isMtt && e.status == HandStatus.showdown;
+    final isShowdown = e.status == HandStatus.showdown;
     final haveWinner = _winnerSeat != null;
     final headline = wonByFold
         ? '${_positions[_winnerSeat]} wins ${money(e.pot)} uncontested'
@@ -681,7 +660,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ? (haveWinner
                 ? '${_positions[_winnerSeat]} wins ${money(e.pot)}'
                 : 'Showdown · pot ${money(e.pot)}')
-            : 'Preflop captured · pot ${money(e.pot)}';
+            : 'Hand captured · pot ${money(e.pot)}';
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -723,7 +702,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  /// Optional villain shown-card capture at an MTT showdown: a toggle that
+  /// Optional villain shown-card capture at showdown: a toggle that
   /// makes the ring tappable, plus chips for any cards already entered.
   Widget _shownCardsControls() {
     return Column(
