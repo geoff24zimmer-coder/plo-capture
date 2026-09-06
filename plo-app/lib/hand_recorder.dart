@@ -76,6 +76,7 @@ Map<String, dynamic> buildHandJson({
   String? turnCard,
   String? riverCard,
   int? winnerSeat,
+  List<List<int>>? potWinners, // winners per computePots() pot; splits allowed
   Map<int, List<String>> shownCards = const {}, // villain seat -> shown cards
   int? rake,
   String? sessionId,
@@ -84,8 +85,70 @@ Map<String, dynamic> buildHandJson({
   bool markedForReview = false,
   bool complete = true, // false = a decision spot saved mid-action
 }) {
-  final won = winnerSeat != null ? engine.pot - (rake ?? 0) : null;
   final heroCommitted = engine.players[cfg.heroSeat]!.totalCommit;
+
+  // Resolve winners per pot. `potWinners` (from the capture UI's per-pot
+  // selection) wins; else the legacy single `winnerSeat` claims every pot
+  // it's eligible for (fold-outs, old callers). Pots are as computePots()
+  // lays them: called chips only — uncalled excess is returned, not won.
+  final breakdown = engine.computePots();
+  List<List<int>>? resolved;
+  if (potWinners != null) {
+    resolved = potWinners;
+  } else if (winnerSeat != null) {
+    resolved = [
+      for (final p in breakdown.pots)
+        p.eligible.contains(winnerSeat) ? [winnerSeat] : [p.eligible.first],
+    ];
+  }
+
+  // Per-pot winnings. Rake comes off the main (first) pot. Splits divide
+  // evenly; any odd remainder goes to the first winner in seat order.
+  // A pot with no winners recorded stays in the output winner-less (partial
+  // info is first-class) — but then hero_net is unknowable and omitted.
+  final wonBySeat = <int, int>{};
+  final potsJson = <Map<String, dynamic>>[];
+  var fullyResolved = resolved != null;
+  if (resolved != null) {
+    for (var i = 0; i < breakdown.pots.length; i++) {
+      final p = breakdown.pots[i];
+      final winners = [...(i < resolved.length ? resolved[i] : const <int>[])]
+        ..sort();
+      if (winners.isEmpty) {
+        fullyResolved = false;
+        potsJson.add({
+          'pot_type': i == 0 ? 'main' : 'side',
+          'amount': p.amount,
+        });
+        continue;
+      }
+      final amt = i == 0 ? p.amount - (rake ?? 0) : p.amount;
+      final share = amt ~/ winners.length;
+      var remainder = amt - share * winners.length;
+      potsJson.add({
+        'pot_type': i == 0 ? 'main' : 'side',
+        'amount': p.amount,
+        'winners': [
+          for (final w in winners)
+            {
+              'seat': w,
+              'amount_won': share + (remainder-- > 0 ? 1 : 0),
+              'share_type': winners.length == 1 ? 'full' : 'split',
+            }
+        ],
+      });
+      remainder = amt - share * winners.length;
+      for (final w in winners) {
+        wonBySeat[w] =
+            (wonBySeat[w] ?? 0) + share + (remainder-- > 0 ? 1 : 0);
+      }
+    }
+  }
+  final heroReturned =
+      breakdown.returnedSeat == cfg.heroSeat ? breakdown.returnedAmount : 0;
+  final heroNet = !fullyResolved
+      ? null
+      : (wonBySeat[cfg.heroSeat] ?? 0) + heroReturned - heroCommitted;
 
   return {
     'schema_version': '1.0',
@@ -162,20 +225,16 @@ Map<String, dynamic> buildHandJson({
           {'seat': e.key, 'reveal': 'full', 'cards': e.value},
       ],
     'results': {
-      if (winnerSeat != null)
-        'pots': [
-          {
-            'pot_type': 'main',
-            'amount': engine.pot,
-            'winners': [
-              {'seat': winnerSeat, 'amount_won': won, 'share_type': 'full'}
-            ],
-          }
-        ],
+      if (potsJson.isNotEmpty) 'pots': potsJson,
+      // Additive field (schema-lenient consumers ignore it): chips returned
+      // uncontested to the last aggressor — never part of any pot.
+      if (resolved != null && breakdown.returnedAmount > 0)
+        'uncalled_returned': {
+          'seat': breakdown.returnedSeat,
+          'amount': breakdown.returnedAmount,
+        },
       'rake': rake,
-      if (winnerSeat != null)
-        'hero_net':
-            (winnerSeat == cfg.heroSeat ? won! : 0) - heroCommitted,
+      if (heroNet != null) 'hero_net': heroNet,
     },
     'meta': {
       'marked_for_review': markedForReview,

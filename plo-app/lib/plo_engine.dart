@@ -113,6 +113,27 @@ class AppliedAction {
   });
 }
 
+/// One pot layer at hand end: its chips and the non-folded seats that can
+/// win it. `eligible` is in seat order; a single-eligible pot needs no winner
+/// choice (dead money only that seat can claim).
+class Pot {
+  final int amount;
+  final List<int> eligible;
+  const Pot(this.amount, this.eligible);
+}
+
+/// The pot structure at hand end: main pot first, then side pots in the order
+/// they formed, plus any uncalled excess returned to the last aggressor
+/// (never part of any pot — it was never contested).
+class PotBreakdown {
+  final List<Pot> pots;
+  final int? returnedSeat;
+  final int returnedAmount;
+  const PotBreakdown(this.pots, this.returnedSeat, this.returnedAmount);
+
+  int get total => pots.fold(0, (a, p) => a + p.amount);
+}
+
 class EngineException implements Exception {
   final String message;
   EngineException(this.message);
@@ -273,6 +294,78 @@ class HandEngine {
 
   List<int> get activeSeats =>
       _seatOrder.where((s) => !players[s]!.folded).toList();
+
+  /// Layer the committed chips into main/side pots from per-player
+  /// [PlayerState.totalCommit] — the engine already tracks everything needed.
+  ///
+  /// Method: any chips one player committed beyond every other player's
+  /// commitment were never contested and are returned first (uncalled bet).
+  /// The rest layers at each distinct commit level of the non-folded players:
+  /// everyone (folded included — their chips are dead money) contributes what
+  /// they put in up to that level; non-folded players at or above the level
+  /// are eligible. Antes ride inside totalCommit and layer with it.
+  ///
+  /// Valid whenever the hand is over; total + returned always equals [pot].
+  PotBreakdown computePots() {
+    final live = activeSeats;
+    if (live.isEmpty) return const PotBreakdown([], null, 0);
+
+    // Uncalled excess: the top live player's commit beyond the highest other
+    // commit (folded players count — their dead chips WERE a call once).
+    final effective = {
+      for (final s in _seatOrder) s: players[s]!.totalCommit,
+    };
+    int? returnedSeat;
+    var returnedAmount = 0;
+    var topSeat = live.first;
+    for (final s in live) {
+      if (effective[s]! > effective[topSeat]!) topSeat = s;
+    }
+    var maxOther = 0;
+    for (final s in _seatOrder) {
+      if (s == topSeat) continue;
+      if (effective[s]! > maxOther) maxOther = effective[s]!;
+    }
+    if (effective[topSeat]! > maxOther) {
+      returnedSeat = topSeat;
+      returnedAmount = effective[topSeat]! - maxOther;
+      effective[topSeat] = maxOther;
+    }
+
+    // Layer at each distinct live commit level, ascending.
+    final levels =
+        live.map((s) => effective[s]!).where((c) => c > 0).toSet().toList()
+          ..sort();
+    final pots = <Pot>[];
+    var prev = 0;
+    for (final lvl in levels) {
+      var amt = 0;
+      for (final s in _seatOrder) {
+        final c = effective[s]!;
+        amt += (c < lvl ? c : lvl) - (c < prev ? c : prev);
+      }
+      if (amt > 0) {
+        pots.add(Pot(
+            amt, live.where((s) => effective[s]! >= lvl).toList()));
+      }
+      prev = lvl;
+    }
+    // Safety: dead money above the top live level (impossible in legal play,
+    // but foreign records replay here too) folds into the last pot so that
+    // total + returned always equals the engine pot.
+    var leftover = -returnedAmount;
+    for (final s in _seatOrder) {
+      leftover += players[s]!.totalCommit;
+    }
+    for (final p in pots) {
+      leftover -= p.amount;
+    }
+    if (leftover > 0 && pots.isNotEmpty) {
+      final last = pots.removeLast();
+      pots.add(Pot(last.amount + leftover, last.eligible));
+    }
+    return PotBreakdown(pots, returnedSeat, returnedAmount);
+  }
 
   /// Pot-limit math, the one formula that must never be wrong:
   ///   toCallInc     = currentBet - actorStreetCommit

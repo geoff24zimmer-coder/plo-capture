@@ -1,6 +1,15 @@
 import 'plo_engine.dart';
 import 'hand_recorder.dart';
 
+/// One resolved pot from a stored hand's results: its chips and who won it
+/// (several seats on a chop).
+class PotResult {
+  final String potType; // main | side
+  final int amount;
+  final List<int> winners;
+  const PotResult(this.potType, this.amount, this.winners);
+}
+
 /// A stored hand parsed back into engine-replayable form. The replayer
 /// rebuilds the engine and applies the first k actions for any step k —
 /// the same deterministic-replay trick that powers undo during capture.
@@ -12,7 +21,8 @@ class LoadedHand {
   final List<String> flop;
   final String? turnCard;
   final String? riverCard;
-  final int? winnerSeat;
+  final int? winnerSeat; // first winner of the main pot (headline convenience)
+  final List<PotResult> pots; // full pot-by-pot results, main first
   final Map<int, List<String>> shownCards; // villain seat -> cards seen
   final Map<String, dynamic> raw;
 
@@ -25,6 +35,7 @@ class LoadedHand {
     required this.turnCard,
     required this.riverCard,
     required this.winnerSeat,
+    this.pots = const [],
     required this.shownCards,
     required this.raw,
   });
@@ -93,14 +104,20 @@ LoadedHand loadHand(Map<String, dynamic> j) {
         s['seat'] as int: (s['cards'] as List).cast<String>(),
   };
   final results = j['results'] as Map<String, dynamic>? ?? {};
-  final pots = results['pots'] as List? ?? [];
-  int? winner;
-  if (pots.isNotEmpty) {
-    final winners = (pots.first as Map<String, dynamic>)['winners'] as List?;
-    if (winners != null && winners.isNotEmpty) {
-      winner = (winners.first as Map<String, dynamic>)['seat'] as int?;
-    }
-  }
+  final potResults = <PotResult>[
+    for (final p in (results['pots'] as List? ?? []).cast<Map<String, dynamic>>())
+      PotResult(
+        p['pot_type'] as String? ?? 'main',
+        p['amount'] as int? ?? 0,
+        [
+          for (final w in (p['winners'] as List? ?? []).cast<Map<String, dynamic>>())
+            if (w['seat'] is int) w['seat'] as int
+        ],
+      ),
+  ];
+  final winner = potResults.isNotEmpty && potResults.first.winners.isNotEmpty
+      ? potResults.first.winners.first
+      : null;
 
   return LoadedHand(
     cfg: cfg,
@@ -121,6 +138,7 @@ LoadedHand loadHand(Map<String, dynamic> j) {
     turnCard: board['turn'] as String?,
     riverCard: board['river'] as String?,
     winnerSeat: winner,
+    pots: potResults,
     shownCards: shown,
     raw: j,
   );

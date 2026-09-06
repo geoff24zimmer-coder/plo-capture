@@ -469,10 +469,31 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
       ActionType.raise => '$pos raises to ${money(a.amount!)}',
     };
     final allIn = a.isAllIn ? ' (all-in)' : '';
-    if (_step == h.actions.length && h.winnerSeat != null) {
-      final w = h.positions[h.winnerSeat] ?? 'Seat ${h.winnerSeat}';
-      return '$desc$allIn — $w wins ${money(e.pot)}';
+    if (_step == h.actions.length) {
+      final result = _resultText(h);
+      if (result.isNotEmpty) return '$desc$allIn — $result';
+      // Older records: a winner but no pot breakdown.
+      if (h.winnerSeat != null) {
+        final w = h.positions[h.winnerSeat] ?? 'Seat ${h.winnerSeat}';
+        return '$desc$allIn — $w wins ${money(e.pot)}';
+      }
     }
     return '$desc$allIn';
+  }
+
+  /// Pot-by-pot outcome: "CO wins $2,554", "CO & BTN split $2,554", or with
+  /// side pots "CO wins main $2,000 · MP wins side $554".
+  String _resultText(LoadedHand h) {
+    String names(List<int> seats) =>
+        seats.map((s) => h.positions[s] ?? 'Seat $s').join(' & ');
+    final parts = <String>[];
+    for (final p in h.pots) {
+      if (p.winners.isEmpty) continue;
+      final verb = p.winners.length == 1 ? 'wins' : 'split';
+      final label =
+          h.pots.length == 1 ? '' : (p.potType == 'main' ? 'main ' : 'side ');
+      parts.add('${names(p.winners)} $verb $label${money(p.amount)}');
+    }
+    return parts.join(' · ');
   }
 }

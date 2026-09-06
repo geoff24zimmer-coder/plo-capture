@@ -480,6 +480,18 @@
             }
           }
         },
+        "uncalled_returned": {
+          "type": "object",
+          "description": "Chips returned uncontested to the last aggressor (bet/raise beyond what anyone matched). Never part of any pot. Additive in v1.0 — lenient consumers ignore it.",
+          "properties": {
+            "seat": {
+              "type": "integer"
+            },
+            "amount": {
+              "type": "integer"
+            }
+          }
+        },
         "rake": {
           "type": [
             "integer",

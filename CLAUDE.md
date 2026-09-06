@@ -69,8 +69,10 @@ to measure this.
 
 1. Stats engine over SQLite: PLO-adapted positional frequencies, straddle-pot
    vs non-straddle win rates, multiway vs HU, split cash/MTT from day one.
-2. Per-seat stack editing on the seat ring (long-press); side-pot math in the
-   recorder (engine already tracks per-player totalCommit).
+2. Per-seat stack editing on the seat ring (long-press). (Side-pot/split-pot
+   math shipped: `engine.computePots()` layers totalCommit into main/side
+   pots with uncalled-bet return; recorder serializes multi-pot + split
+   winners; capture UI resolves pots by tap, chops by multi-tap.)
 3. MTT depth: ICM context, bounties, payout structures (data already
    captured).
 4. Export/aggregation layer: suit-isomorphism normalization, per-node
@@ -80,6 +82,7 @@ to measure this.
 
 - `chipMode` in `lib/util.dart` is a global display toggle (cash $ vs MTT
   chips); a threaded formatter is the cleaner refactor.
-- Results support a single full-pot winner; side pots and split pots pending.
+- Results support side pots and split pots (chops); hi/lo `share_type` values
+  exist in the schema but the UI never emits them (PLO high-only).
 - Existing DBs from before the variant-column removal need a wipe (app is
   pre-release; no migration written).

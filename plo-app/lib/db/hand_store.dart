@@ -156,7 +156,10 @@ class HandStore {
       'captured_at':
           DateTime.parse(handJson['captured_at'] as String).millisecondsSinceEpoch,
       'hero_net': results['hero_net'],
-      'pot': pots.isNotEmpty ? pots.first['amount'] : null,
+      // Total across main + side pots (as played — uncalled excess excluded).
+      'pot': pots.isNotEmpty
+          ? pots.fold<int>(0, (a, p) => a + (p['amount'] as int? ?? 0))
+          : null,
       'marked':
           (handJson['meta']?['marked_for_review'] as bool? ?? false) ? 1 : 0,
       // The JSON is authoritative; this column just mirrors it for list queries.

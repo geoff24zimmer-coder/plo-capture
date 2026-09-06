@@ -64,7 +64,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
   HandEngine? _engine;
   Map<int, String> _positions = {};
   List<String> _heroCards = [];
-  int? _winnerSeat; // won-by-fold seat, or the showdown winner the user taps
+  // Pot-by-pot results, from engine.computePots() when the hand ends. Single-
+  // eligible pots (fold-outs, uncontested side layers) auto-resolve; the user
+  // taps winners for the rest — several taps on one pot mark a chop.
+  List<Pot> _pots = [];
+  List<Set<int>> _potWinners = [];
+  int _potIdx = 0; // the pot currently being resolved / edited
   DateTime? _dealTime;
   final List<({int seat, ActionType type, int? amount})> _applied = [];
 
@@ -165,7 +170,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       _river = null;
       _shownCards.clear();
       _addingShown = false;
-      _winnerSeat = null;
+      _clearPots();
       _markedForReview = false;
       _applied.clear();
       _dealTime = DateTime.now();
@@ -202,7 +207,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
     if (_phase != _Phase.result || e == null) return false;
     if (_heroSeat == null) return true; // claim the seat the hand was logged from
     if (_addingShown) return true; // entering villain shown cards
-    return e.status == HandStatus.showdown && _winnerSeat == null; // pick winner
+    // Toggle winners of the pot being resolved (stays tappable to fix taps).
+    return e.status == HandStatus.showdown && _pots.isNotEmpty;
   }
 
   /// Dispatch a seat tap in the result step by what's currently being asked for.
@@ -215,16 +221,54 @@ class _CaptureScreenState extends State<CaptureScreen> {
       _enterShownCards(seat);
       return;
     }
-    if (_engine!.status == HandStatus.showdown && _winnerSeat == null) {
-      _pickWinner(seat);
+    if (_engine!.status == HandStatus.showdown && _pots.isNotEmpty) {
+      _toggleWinner(seat);
     }
   }
 
-  /// Record the showdown winner — only a seat still in the hand can win.
-  void _pickWinner(int seat) {
-    if (!_engine!.activeSeats.contains(seat)) return;
+  /// Compute the pot breakdown at hand end and auto-resolve every pot only
+  /// one seat can win (fold-outs, uncontested layers). The uncalled excess of
+  /// a partially-called bet is already excluded (returned) by the engine.
+  void _initPots() {
+    final b = _engine!.computePots();
+    _pots = b.pots;
+    _potWinners = [
+      for (final p in b.pots)
+        p.eligible.length == 1 ? {p.eligible.single} : <int>{},
+    ];
+    final first = _potWinners.indexWhere((w) => w.isEmpty);
+    _potIdx = first < 0 ? 0 : first;
+  }
+
+  void _clearPots() {
+    _pots = [];
+    _potWinners = [];
+    _potIdx = 0;
+  }
+
+  bool get _allPotsResolved =>
+      _pots.isNotEmpty && _potWinners.every((w) => w.isNotEmpty);
+
+  /// Toggle [seat] as a winner of the pot being resolved. Tapping one seat is
+  /// the fast path (full winner); tapping more marks a chop; re-tapping
+  /// removes. Only seats eligible for THIS pot count.
+  void _toggleWinner(int seat) {
+    if (_potIdx >= _pots.length) return;
+    if (!_pots[_potIdx].eligible.contains(seat)) return;
     HapticFeedback.selectionClick();
-    setState(() => _winnerSeat = seat);
+    setState(() {
+      final sel = _potWinners[_potIdx];
+      if (!sel.remove(seat)) {
+        sel.add(seat);
+        // First winner of this pot placed — jump to the next unresolved pot
+        // (the common multi-pot flow). Chops: re-select the pot chip and tap
+        // the extra winner(s).
+        if (sel.length == 1 && _pots.length > 1) {
+          final next = _potWinners.indexWhere((w) => w.isEmpty);
+          if (next >= 0) _potIdx = next;
+        }
+      }
+    });
   }
 
   /// Enter the cards a still-in villain showed (full 4-card reveal). The hero's
@@ -262,7 +306,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     final e = _engine!;
     if (e.status == HandStatus.wonByFold) {
       setState(() {
-        _winnerSeat = e.activeSeats.first;
+        _initPots(); // single pot, single eligible seat — auto-resolved
         _phase = _Phase.result;
       });
       return;
@@ -271,7 +315,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       await _fillRemainingBoard(); // an all-in run-out may skip street prompts
       if (!mounted) return;
       setState(() {
-        _winnerSeat = null; // user taps the winner
+        _initPots(); // user taps the winner(s), pot by pot
         _phase = _Phase.result;
       });
       return;
@@ -330,7 +374,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
     setState(() {
       _engine = e;
-      _winnerSeat = null;
+      _clearPots();
       _addingShown = false;
       _shownCards.clear();
       // Trim board cards for any street the engine no longer occupies.
@@ -350,7 +394,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
         flop: _flop,
         turnCard: _turn,
         riverCard: _river,
-        winnerSeat: _winnerSeat,
+        potWinners: _pots.isEmpty
+            ? null
+            : [for (final w in _potWinners) w.toList()],
         shownCards: Map.of(_shownCards),
         sessionId: widget.session.id,
         markedForReview: _markedForReview,
@@ -653,13 +699,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
     final wonByFold = e.status == HandStatus.wonByFold;
     final isShowdown = e.status == HandStatus.showdown;
-    final haveWinner = _winnerSeat != null;
     final headline = wonByFold
-        ? '${_positions[_winnerSeat]} wins ${money(e.pot)} uncontested'
+        ? '${_potSummary()} uncontested'
         : isShowdown
-            ? (haveWinner
-                ? '${_positions[_winnerSeat]} wins ${money(e.pot)}'
-                : 'Showdown · pot ${money(e.pot)}')
+            ? (_allPotsResolved ? _potSummary() : _potPrompt())
             : 'Hand captured · pot ${money(e.pot)}';
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -671,15 +714,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16)),
         ),
-        if (isShowdown && !haveWinner)
+        if (isShowdown && !_allPotsResolved)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text('Tap the winning seat above',
+            child: Text('Tap the winning seat — tap another to mark a chop',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 12.5,
                     color: Colors.white.withValues(alpha: 0.6))),
           ),
+        if (isShowdown && _pots.length > 1) _potSelector(),
         if (isShowdown) _shownCardsControls(),
         Row(
           children: [
@@ -699,6 +743,53 @@ class _CaptureScreenState extends State<CaptureScreen> {
           child: const Text('Save hand'),
         ),
       ],
+    );
+  }
+
+  /// "CO wins $2,554", "CO & BTN split $2,554", or with side pots
+  /// "CO wins main $2,000 · MP wins side $554". Unresolved pots are skipped.
+  String _potSummary() {
+    String names(Set<int> seats) {
+      final sorted = seats.toList()..sort();
+      return sorted.map((s) => _positions[s] ?? 'Seat $s').join(' & ');
+    }
+
+    final parts = <String>[];
+    for (var i = 0; i < _pots.length; i++) {
+      if (_potWinners[i].isEmpty) continue;
+      final verb = _potWinners[i].length == 1 ? 'wins' : 'split';
+      final label = _pots.length == 1 ? '' : (i == 0 ? 'main ' : 'side ');
+      parts
+          .add('${names(_potWinners[i])} $verb $label${money(_pots[i].amount)}');
+    }
+    return parts.isEmpty ? 'Showdown · pot ${money(_engine!.pot)}' : parts.join(' · ');
+  }
+
+  String _potPrompt() {
+    final label =
+        _pots.length == 1 ? 'Pot' : (_potIdx == 0 ? 'Main pot' : 'Side pot');
+    return '$label ${money(_pots[_potIdx].amount)} — who won it?';
+  }
+
+  /// With side pots, a chip per pot to switch which one the seat taps
+  /// resolve. A ✓ marks pots that already have a winner.
+  Widget _potSelector() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        spacing: 6,
+        alignment: WrapAlignment.center,
+        children: [
+          for (var i = 0; i < _pots.length; i++)
+            ChoiceChip(
+              label: Text(
+                  '${i == 0 ? 'Main' : 'Side'} ${money(_pots[i].amount)}'
+                  '${_potWinners[i].isNotEmpty ? ' ✓' : ''}'),
+              selected: _potIdx == i,
+              onSelected: (_) => setState(() => _potIdx = i),
+            ),
+        ],
+      ),
     );
   }
 
