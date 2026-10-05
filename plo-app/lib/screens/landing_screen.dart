@@ -3,6 +3,7 @@ import '../db/hand_store.dart';
 import '../models/session.dart';
 import '../tracker/format.dart';
 import 'capture_screen.dart';
+import 'equity_screen.dart';
 import 'hand_list_screen.dart';
 import 'tracker_screen.dart';
 
@@ -72,6 +73,14 @@ class _LandingScreenState extends State<LandingScreen> {
                     label: 'Tracker',
                     icon: Icons.calendar_month_outlined,
                     onTap: () => _push(const TrackerScreen()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ToolButton(
+                    label: 'Equity',
+                    icon: Icons.percent,
+                    onTap: () => _push(const EquityScreen()),
                   ),
                 ),
               ]),
