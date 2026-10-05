@@ -220,4 +220,63 @@ void main() {
       expect(clock(DateTime(2026, 1, 1, 19, 30)), '7:30pm');
     });
   });
+
+  group('untimed sessions (result entered with no real playing time)', () {
+    // The tester's case: start → cash-out in ~40s, +\$492 at 2/5.
+    Session quick(int net) {
+      final start = DateTime(2026, 10, 5, 18, 10);
+      return Session(
+          id: 'q${_n++}',
+          createdAt: start,
+          gameType: 'cash',
+          smallBlind: 200,
+          bigBlind: 500,
+          venue: 'Lodge',
+          maxSeats: 8,
+          endedAt: start.add(const Duration(seconds: 40)),
+          buyIn: 100000,
+          cashOut: 100000 + net);
+    }
+
+    test('count toward net and win %, never toward a rate', () {
+      final st = computeCashStats([quick(49200)]);
+      expect(st.net, 49200);
+      expect(st.winRatePct, 100);
+      expect(st.untimedSessions, 1);
+      expect(st.hours, 0);
+      expect(st.hourly, isNull); // was \$41,191/hr
+      expect(st.bbPerHour, isNull); // was 8,238 bb/hr
+    });
+
+    test('rates come from timed sessions only', () {
+      final timed = cash(DateTime(2026, 10, 2, 19), 5, 1000, 1500); // +500/5h
+      final st = computeCashStats([timed, quick(49200)]);
+      expect(st.net, 50000 + 49200);
+      expect(st.hours, closeTo(5, 1e-9));
+      expect(st.hourly, closeTo(10000, 1e-9)); // \$100/hr, from the 5h only
+      expect(st.bbPerHour, closeTo(20, 1e-9));
+      expect(st.byStakes.single.hourly, closeTo(10000, 1e-9));
+      expect(st.byStakes.single.net, 99200);
+      expect(st.byLength.map((b) => b.label), ['4–6h']);
+      final led = Ledger.from([quick(49200)]);
+      expect(led.days.values.single.hours, 0);
+      expect(led.days.values.single.net, 49200);
+    });
+
+    test('five minutes is the line', () {
+      Session lasting(Duration d) => Session(
+          id: 'd${_n++}',
+          createdAt: DateTime(2026, 10, 5, 18),
+          gameType: 'cash',
+          smallBlind: 200,
+          bigBlind: 500,
+          venue: 'Lodge',
+          maxSeats: 8,
+          endedAt: DateTime(2026, 10, 5, 18).add(d),
+          buyIn: 1,
+          cashOut: 2);
+      expect(lasting(const Duration(minutes: 4, seconds: 59)).isTimed, isFalse);
+      expect(lasting(const Duration(minutes: 5)).isTimed, isTrue);
+    });
+  });
 }

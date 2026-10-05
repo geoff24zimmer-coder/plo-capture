@@ -24,53 +24,109 @@ Future<Session?> editSession(
 /// The cash-out prompt when ending a live session. Returns the session with
 /// the result filled in and [Session.endedAt] set, or null if cancelled.
 /// "End without result" ends it unresolved (it'll show as needing a result).
+///
+/// The start time is shown and editable: a player who opens the app only
+/// after the session (start → cash-out in a minute) can set when they really
+/// sat down, so the session gets real hours instead of none.
 Future<Session?> endSessionDialog(BuildContext context, Session s) async {
   final inCtrl = TextEditingController(text: dollarsField(s.buyIn));
   final outCtrl = TextEditingController();
+  var start = s.createdAt;
   final action = await showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('End session'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '${s.stakesLabel} · ${s.venue} · ${durationLabel(s.duration())}',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialog) {
+        final now = DateTime.now();
+        final played = now.difference(start);
+        final short = played < Session.minTimed;
+        return AlertDialog(
+          title: const Text('End session'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${s.stakesLabel} · ${s.venue}',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.schedule, size: 18),
+                    label: Text('Started ${clock(start)}'),
+                    onPressed: () async {
+                      final t = await showTimePicker(
+                          context: ctx,
+                          initialTime: TimeOfDay.fromDateTime(start),
+                          helpText: 'WHEN DID YOU START PLAYING?');
+                      if (t == null) return;
+                      final picked = startFromClock(
+                          t.hour, t.minute, DateTime.now());
+                      setDialog(() => start = picked);
+                    },
+                  ),
+                  Text(durationLabel(played),
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.65))),
+                ],
+              ),
+              if (short)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Logging after you played? Tap the start time and set when '
+                    'you sat down — otherwise this session won’t count toward '
+                    'your hourly rate.',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFFEF9F27)),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              _MoneyField(
+                  controller: inCtrl,
+                  label: s.isMtt
+                      ? 'Total buy-ins'
+                      : 'Total buy-in (incl. rebuys)'),
+              const SizedBox(height: 10),
+              _MoneyField(
+                  controller: outCtrl,
+                  label: s.isMtt ? 'Prize won (0 if busted)' : 'Cash-out',
+                  autofocus: true),
+            ],
           ),
-          const SizedBox(height: 14),
-          _MoneyField(
-              controller: inCtrl,
-              label: s.isMtt ? 'Total buy-ins' : 'Total buy-in (incl. rebuys)'),
-          const SizedBox(height: 10),
-          _MoneyField(
-              controller: outCtrl,
-              label: s.isMtt ? 'Prize won (0 if busted)' : 'Cash-out',
-              autofocus: true),
-        ],
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, 'skip'),
-            child: const Text('End without result')),
-        FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'end'),
-            child: const Text('End session')),
-      ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, 'skip'),
+                child: const Text('End without result')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, 'end'),
+                child: const Text('End session')),
+          ],
+        );
+      },
     ),
   );
   if (action == null) return null;
   final now = DateTime.now();
-  if (action == 'skip') {
-    return s.copyWith(endedAt: () => now, buyIn: () => parseDollars(inCtrl.text));
-  }
-  return s.copyWith(
+  final ended = s.copyWith(
+    createdAt: start,
     endedAt: () => now,
     buyIn: () => parseDollars(inCtrl.text),
-    cashOut: () => parseDollars(outCtrl.text),
   );
+  if (action == 'skip') return ended;
+  return ended.copyWith(cashOut: () => parseDollars(outCtrl.text));
+}
+
+/// The most recent moment at [hour]:[minute] not after [now] — a start time
+/// picked "later than now" means yesterday (a session past midnight).
+DateTime startFromClock(int hour, int minute, DateTime now) {
+  final t = DateTime(now.year, now.month, now.day, hour, minute);
+  return t.isAfter(now) ? t.subtract(const Duration(days: 1)) : t;
 }
 
 /// Add a rebuy/add-on to a live session's buy-in. Returns cents, or null.
@@ -123,8 +179,14 @@ class _SessionEditorState extends State<_SessionEditor> {
   late String _type, _game;
   late DateTime _start;
   DateTime? _end; // null only while editing a live session
-  late final TextEditingController _venue, _sb, _bb, _in, _out, _finish,
-      _entrants, _notes;
+  late final TextEditingController _venue,
+      _sb,
+      _bb,
+      _in,
+      _out,
+      _finish,
+      _entrants,
+      _notes;
 
   bool get _isNew => widget.initial == null;
   bool get _isMtt => _type == 'mtt';
@@ -135,15 +197,17 @@ class _SessionEditorState extends State<_SessionEditor> {
     final s = widget.initial;
     final now = DateTime.now();
     // A new log defaults to "a 4-hour session that just ended".
-    final end = DateTime(now.year, now.month, now.day, now.hour,
-        now.minute - now.minute % 15);
+    final end = DateTime(
+        now.year, now.month, now.day, now.hour, now.minute - now.minute % 15);
     _type = s?.gameType ?? 'cash';
     _game = s?.game ?? 'plo4';
     _start = s?.createdAt ?? end.subtract(const Duration(hours: 4));
     _end = s == null ? end : s.endedAt;
     _venue = TextEditingController(text: s?.venue ?? '');
-    _sb = TextEditingController(text: s == null ? '2' : dollarsField(s.smallBlind));
-    _bb = TextEditingController(text: s == null ? '5' : dollarsField(s.bigBlind));
+    _sb = TextEditingController(
+        text: s == null ? '2' : dollarsField(s.smallBlind));
+    _bb =
+        TextEditingController(text: s == null ? '5' : dollarsField(s.bigBlind));
     _in = TextEditingController(text: dollarsField(s?.buyIn));
     _out = TextEditingController(text: dollarsField(s?.cashOut));
     _finish = TextEditingController(text: s?.mttFinish?.toString() ?? '');
@@ -187,11 +251,13 @@ class _SessionEditorState extends State<_SessionEditor> {
     setState(() {
       if (start) {
         final len = _end?.difference(_start);
-        _start = DateTime(_start.year, _start.month, _start.day, t.hour, t.minute);
+        _start =
+            DateTime(_start.year, _start.month, _start.day, t.hour, t.minute);
         if (len != null && !len.isNegative) _end = _start.add(len);
       } else {
         // An end time "before" the start means the session ran past midnight.
-        var e = DateTime(_start.year, _start.month, _start.day, t.hour, t.minute);
+        var e =
+            DateTime(_start.year, _start.month, _start.day, t.hour, t.minute);
         if (!e.isAfter(_start)) e = e.add(const Duration(days: 1));
         _end = e;
       }
@@ -314,16 +380,22 @@ class _SessionEditorState extends State<_SessionEditor> {
           _sectionLabel('RESULT'),
           _MoneyField(
               controller: _in,
-              label: _isMtt ? 'Total buy-ins (incl. fee, re-entries)' : 'Total buy-in (incl. rebuys)'),
+              label: _isMtt
+                  ? 'Total buy-ins (incl. fee, re-entries)'
+                  : 'Total buy-in (incl. rebuys)'),
           if (!live) ...[
             const SizedBox(height: 8),
             TextField(
               controller: _out,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: _isMtt ? 'Prize won incl. bounties (0 if busted)' : 'Cash-out',
+                labelText: _isMtt
+                    ? 'Prize won incl. bounties (0 if busted)'
+                    : 'Cash-out',
                 prefixText: '\$ ',
-                helperText: net == null ? 'Leave blank if you don’t know yet' : null,
+                helperText:
+                    net == null ? 'Leave blank if you don’t know yet' : null,
                 suffixText: net == null ? null : usd(net, signed: true),
                 suffixStyle: TextStyle(
                     fontWeight: FontWeight.w700,
@@ -340,13 +412,15 @@ class _SessionEditorState extends State<_SessionEditor> {
                   child: TextField(
                       controller: _finish,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Finish (place)'))),
+                      decoration:
+                          const InputDecoration(labelText: 'Finish (place)'))),
               const SizedBox(width: 12),
               Expanded(
                   child: TextField(
                       controller: _entrants,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Entrants'))),
+                      decoration:
+                          const InputDecoration(labelText: 'Entrants'))),
             ]),
           ],
           const SizedBox(height: 18),

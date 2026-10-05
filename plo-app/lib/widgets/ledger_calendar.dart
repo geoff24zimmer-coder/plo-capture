@@ -178,11 +178,12 @@ class _LedgerCalendarState extends State<LedgerCalendar> {
                     ]),
                     const Spacer(),
                     if (e != null) ...[
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child:
-                            Text('${hoursShort(e.hours)}h', style: _muted(10)),
-                      ),
+                      if (e.hours > 0)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('${hoursShort(e.hours)}h',
+                              style: _muted(10)),
+                        ),
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(usdCompact(e.net),

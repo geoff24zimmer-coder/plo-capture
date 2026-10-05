@@ -225,4 +225,39 @@ void main() {
     expect(find.text('You ran \$151.50 below expectation in these spots.'),
         findsOneWidget);
   });
+
+  testWidgets('End dialog: start time shown; just-started session is flagged',
+      (t) async {
+    final live = Session(
+        id: 'live',
+        createdAt: DateTime.now().subtract(const Duration(seconds: 30)),
+        gameType: 'cash',
+        smallBlind: 200,
+        bigBlind: 500,
+        venue: 'Lodge',
+        maxSeats: 8,
+        buyIn: 100000);
+    Session? out;
+    await pump(
+        t,
+        Builder(
+            builder: (ctx) => TextButton(
+                onPressed: () async => out = await endSessionDialog(ctx, live),
+                child: const Text('go'))));
+    await t.tap(find.text('go'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Started '), findsOneWidget);
+    expect(find.textContaining('Logging after you played?'), findsOneWidget);
+    await t.enterText(find.widgetWithText(TextField, 'Cash-out'), '1492');
+    await t.tap(find.widgetWithText(FilledButton, 'End session'));
+    await t.pumpAndSettle();
+    expect(out!.net, 49200);
+    expect(out!.isTimed, isFalse); // left as-is → won't feed the hourly rate
+  });
+
+  test('a picked start time later than now means yesterday', () {
+    final now = DateTime(2026, 10, 6, 1, 30); // 1:30am
+    expect(startFromClock(19, 0, now), DateTime(2026, 10, 5, 19)); // 7pm
+    expect(startFromClock(0, 45, now), DateTime(2026, 10, 6, 0, 45));
+  });
 }

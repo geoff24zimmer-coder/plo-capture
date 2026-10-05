@@ -130,6 +130,18 @@ class _TrackerStatsViewState extends State<TrackerStatsView> {
         _Tile('SESSIONS', '${st.sessions}'),
         _Tile('WINNING', '${st.winRatePct!.round()}%'),
       ]),
+      if (st.untimedSessions > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            '${st.untimedSessions} session${st.untimedSessions == 1 ? ' has' : 's have'} '
+            'no playing time recorded, so ${st.untimedSessions == 1 ? 'it counts' : 'they count'} '
+            'toward your net but not your hourly rate. Open '
+            '${st.untimedSessions == 1 ? 'it' : 'them'} in Sessions and set the start '
+            'and end times.',
+            style: const TextStyle(fontSize: 12.5, color: Color(0xFFEF9F27)),
+          ),
+        ),
       const SizedBox(height: 12),
       _Card(
         title: 'HOW SURE IS THAT?',
@@ -161,11 +173,14 @@ class _TrackerStatsViewState extends State<TrackerStatsView> {
               ),
       ),
       const SizedBox(height: 12),
-      _Card(
-        title: 'RUNNING TOTAL',
-        child: RunningTotalChart(points: st.runningTotal),
-      ),
-      const SizedBox(height: 12),
+      // Plotted against hours played — meaningless until some are recorded.
+      if (st.hours > 0) ...[
+        _Card(
+          title: 'RUNNING TOTAL',
+          child: RunningTotalChart(points: st.runningTotal),
+        ),
+        const SizedBox(height: 12),
+      ],
       ..._allInLuck(),
       _Card(
         title: 'BEST & WORST',

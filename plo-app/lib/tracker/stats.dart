@@ -15,17 +15,24 @@ import '../models/session.dart';
 class Bucket {
   final String label;
   int sessions = 0;
-  double hours = 0;
-  int net = 0;
+  double hours = 0; // timed sessions only
+  int net = 0; // every session
+  int timedNet = 0; // the net the hours were played for
   Bucket(this.label);
 
-  /// Cents per hour, or null with no time logged.
-  double? get hourly => hours > 0 ? net / hours : null;
+  /// Cents per hour over timed sessions, or null with no time logged.
+  double? get hourly => hours > 0 ? timedNet / hours : null;
 }
 
 class CashStats {
   final int sessions;
+
+  /// Hours of timed sessions ([Session.isTimed]) — the rate denominator.
   final double hours;
+
+  /// Sessions with a result but no real playing time: in [net] and the win
+  /// %, left out of every per-hour figure.
+  final int untimedSessions;
   final int net;
   final int winningSessions;
 
@@ -52,6 +59,7 @@ class CashStats {
   const CashStats({
     required this.sessions,
     required this.hours,
+    required this.untimedSessions,
     required this.net,
     required this.winningSessions,
     required this.hourly,
@@ -121,7 +129,7 @@ CashStats computeCashStats(Iterable<Session> all) {
   final ss = all.where((s) => !s.isMtt && s.hasResult).toList()
     ..sort((a, b) => a.endedAt!.compareTo(b.endedAt!));
 
-  var hours = 0.0, net = 0, wins = 0;
+  var hours = 0.0, net = 0, timedNet = 0, wins = 0, untimed = 0;
   var bbSum = 0.0, bbHours = 0.0;
   Session? best, worst;
   final stakes = <String, Bucket>{}, venues = <String, Bucket>{};
@@ -132,18 +140,27 @@ CashStats computeCashStats(Iterable<Session> all) {
 
   void add(Bucket b, Session s, double h) {
     b.sessions++;
-    b.hours += h;
     b.net += s.net!;
+    if (s.isTimed) {
+      b.hours += h;
+      b.timedNet += s.net!;
+    }
   }
 
   for (final s in ss) {
-    final h = s.hours(), r = s.net!;
-    hours += h;
+    final timed = s.isTimed;
+    final h = timed ? s.hours() : 0.0, r = s.net!;
     net += r;
     if (r > 0) wins++;
-    if (s.bigBlind > 0) {
-      bbSum += r / s.bigBlind;
-      bbHours += h;
+    if (timed) {
+      hours += h;
+      timedNet += r;
+      if (s.bigBlind > 0) {
+        bbSum += r / s.bigBlind;
+        bbHours += h;
+      }
+    } else {
+      untimed++;
     }
     if (best == null || r > best.net!) best = s;
     if (worst == null || r < worst.net!) worst = s;
@@ -151,18 +168,18 @@ CashStats computeCashStats(Iterable<Session> all) {
     add(venues.putIfAbsent(s.venue, () => Bucket(s.venue)), s, h);
     add(games.putIfAbsent(s.gameLabel, () => Bucket(s.gameLabel)), s, h);
     add(weekdays[weekdayLabels[s.createdAt.weekday - 1]]!, s, h);
-    add(lengths[_lengthBucket(h)]!, s, h);
+    if (timed) add(lengths[_lengthBucket(h)]!, s, h);
     running.add((at: s.endedAt!, hours: hours, total: net));
   }
 
-  final hourly = hours > 0 ? net / hours : null;
+  final hourly = hours > 0 ? timedNet / hours : null;
 
   // Per-hour standard deviation, each session weighted by its length:
   //   σ² = Σ hᵢ·(rᵢ/hᵢ − w)² / (n − 1)
   // (sessions with no time logged can't contribute a rate).
   double? sd;
   ({double low, double high})? ci;
-  final timed = ss.where((s) => s.hours() > 0).toList();
+  final timed = ss.where((s) => s.isTimed).toList();
   if (hourly != null && timed.length >= 2) {
     var acc = 0.0;
     for (final s in timed) {
@@ -181,6 +198,7 @@ CashStats computeCashStats(Iterable<Session> all) {
   return CashStats(
     sessions: ss.length,
     hours: hours,
+    untimedSessions: untimed,
     net: net,
     winningSessions: wins,
     hourly: hourly,
@@ -203,7 +221,7 @@ MttStats computeMttStats(Iterable<Session> all) {
   var hours = 0.0, buyIns = 0, cashes = 0, itm = 0;
   int? biggest;
   for (final s in ss) {
-    hours += s.hours();
+    if (s.isTimed) hours += s.hours();
     buyIns += s.buyIn!;
     cashes += s.cashOut!;
     if (s.cashOut! > 0) {
@@ -273,7 +291,7 @@ class Ledger {
         continue;
       }
       final e = days.putIfAbsent(d, () => DayEntry(d));
-      e.hours += s.hours();
+      if (s.isTimed) e.hours += s.hours();
       e.net += s.net!;
       e.sessions++;
     }

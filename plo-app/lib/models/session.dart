@@ -74,6 +74,15 @@ class Session {
 
   double hours([DateTime? now]) => duration(now).inSeconds / 3600.0;
 
+  /// Shorter than this and the clock didn't really run — typically a result
+  /// entered straight after playing. Such a session counts toward net and
+  /// win %, but its "hours" are unknown, not zero, so it stays out of every
+  /// per-hour figure (a +\$492 over 40 seconds is not \$44,000/hr).
+  static const minTimed = Duration(minutes: 5);
+
+  /// Ended with real playing time recorded (see [minTimed]).
+  bool get isTimed => !isActive && duration() >= minTimed;
+
   static const gameLabels = {'plo4': 'PLO', 'plo5': 'PLO5', 'other': 'Mixed'};
 
   String get gameLabel => gameLabels[game] ?? game.toUpperCase();
