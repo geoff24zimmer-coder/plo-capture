@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../models/session.dart';
 import '../tracker/format.dart';
+import '../widgets/home_actions.dart';
 import 'capture_screen.dart';
 import 'equity_screen.dart';
 import 'hand_list_screen.dart';
@@ -48,49 +49,50 @@ class _LandingScreenState extends State<LandingScreen> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 340),
                     child: Image.asset('assets/logo.png',
-                        fit: BoxFit.contain,
-                        semanticLabel: 'The PLO Show App'),
+                        fit: BoxFit.contain, semanticLabel: 'The PLO Show App'),
                   ),
                 ),
               ),
               const SizedBox(height: 12),
-              if (_current != null) _ResumeCard(current: _current!, onTap: _resume),
-              _StartButton(
-                label: 'Cash Game',
-                icon: Icons.payments_outlined,
-                color: const Color(0xFF10B981),
-                onTap: () => _start(context, 'cash'),
+              if (_current != null)
+                _ResumeCard(current: _current!, onTap: _resume),
+              // The app's three features, deliberately equal in weight: same
+              // size and style, each with its own accent.
+              HomeAction(
+                title: 'Log played hands',
+                subtitle: 'Capture a hand in 15 seconds',
+                icon: Icons.style_outlined,
+                accent: homeEmerald,
+                onTap: _logHands,
               ),
-              const SizedBox(height: 14),
-              _StartButton(
-                label: 'Tournament',
-                icon: Icons.emoji_events_outlined,
-                color: const Color(0xFFC9A536),
-                onTap: () => _start(context, 'mtt'),
+              const SizedBox(height: 12),
+              HomeAction(
+                title: 'Session tracker',
+                subtitle: 'Calendar, win rate & every session',
+                icon: Icons.calendar_month_outlined,
+                accent: homeGold,
+                onTap: () => _push(const TrackerScreen()),
               ),
-              const SizedBox(height: 14),
-              Row(children: [
-                Expanded(
-                  child: _ToolButton(
-                    label: 'Tracker',
-                    icon: Icons.calendar_month_outlined,
-                    onTap: () => _push(const TrackerScreen()),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _ToolButton(
-                    label: 'Equity',
-                    icon: Icons.percent,
-                    onTap: () => _push(const EquityScreen()),
-                  ),
-                ),
-              ]),
+              const SizedBox(height: 12),
+              HomeAction(
+                title: 'Equity calculator',
+                subtitle: 'PLO & PLO5 odds, any board',
+                icon: Icons.percent,
+                accent: homeBlue,
+                onTap: () => _push(const EquityScreen()),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// "Log played hands" → cash or tournament → the session setup sheet.
+  Future<void> _logHands() async {
+    final type = await pickGameType(context);
+    if (type == null || !mounted) return;
+    await _start(context, type);
   }
 
   Future<void> _push(Widget screen) async {
@@ -146,8 +148,8 @@ class _LandingScreenState extends State<LandingScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(isMtt ? 'New tournament' : 'New cash game',
-                  style:
-                      const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w500)),
               const SizedBox(height: 14),
               SegmentedButton<String>(
                 segments: [
@@ -188,7 +190,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                    labelText: isMtt ? 'Buy-in incl. fee (optional)' : 'Buy-in (optional)',
+                    labelText: isMtt
+                        ? 'Buy-in incl. fee (optional)'
+                        : 'Buy-in (optional)',
                     prefixText: '\$ '),
               ),
               const SizedBox(height: 12),
@@ -224,8 +228,7 @@ class _LandingScreenState extends State<LandingScreen> {
       gameType: gameType,
       smallBlind:
           isMtt ? 0 : ((double.tryParse(sbCtrl.text) ?? 2) * 100).round(),
-      bigBlind:
-          isMtt ? 0 : ((double.tryParse(bbCtrl.text) ?? 5) * 100).round(),
+      bigBlind: isMtt ? 0 : ((double.tryParse(bbCtrl.text) ?? 5) * 100).round(),
       venue: venueCtrl.text.trim().isEmpty
           ? (isMtt ? 'Tournament' : 'Cash game')
           : venueCtrl.text.trim(),
@@ -305,58 +308,4 @@ class _ResumeCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StartButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  const _StartButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 24),
-      label: Text(label,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-      style: FilledButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-    );
-  }
-}
-
-/// Secondary home-screen destination (Tracker, Equity).
-class _ToolButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _ToolButton(
-      {required this.label, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 20),
-        label: Text(label,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white.withValues(alpha: 0.85),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
-          minimumSize: const Size.fromHeight(50),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
 }
