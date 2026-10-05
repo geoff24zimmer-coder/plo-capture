@@ -23,6 +23,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   test: ^1.24.0
+  # Native SQLite for VM tests of HandStore (migrations, backup import).
+  sqflite_common_ffi: ^2.3.0
   flutter_lints: ^4.0.0
 
 flutter:

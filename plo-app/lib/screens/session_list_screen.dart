@@ -11,7 +11,7 @@ class SessionListScreen extends StatefulWidget {
 }
 
 class _SessionListScreenState extends State<SessionListScreen> {
-  late Future<List<({Session session, int handCount, int net})>> _future;
+  late Future<List<({Session session, int handCount, int handsNet})>> _future;
 
   @override
   void initState() {
@@ -56,7 +56,7 @@ class _SessionListScreenState extends State<SessionListScreen> {
             itemBuilder: (ctx, i) {
               final r = rows[i];
               final s = r.session;
-              final net = r.net;
+              final net = r.handsNet;
               return ListTile(
                 title: Text('${s.stakesLabel} · ${s.venue}'),
                 subtitle: Text(

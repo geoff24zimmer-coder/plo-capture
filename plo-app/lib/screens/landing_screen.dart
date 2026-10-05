@@ -15,7 +15,7 @@ class LandingScreen extends StatefulWidget {
 }
 
 class _LandingScreenState extends State<LandingScreen> {
-  ({Session session, int handCount, int net})? _current;
+  ({Session session, int handCount, int handsNet})? _current;
 
   @override
   void initState() {
@@ -199,7 +199,7 @@ class _LandingScreenState extends State<LandingScreen> {
 
 /// Prominent "pick up where you left off" card for the active session.
 class _ResumeCard extends StatelessWidget {
-  final ({Session session, int handCount, int net}) current;
+  final ({Session session, int handCount, int handsNet}) current;
   final Future<void> Function(Session) onTap;
   const _ResumeCard({required this.current, required this.onTap});
 
@@ -246,7 +246,7 @@ class _ResumeCard extends StatelessWidget {
                               color: Colors.white)),
                       Text(
                         '$hands hand${hands == 1 ? '' : 's'}'
-                        '${current.net != 0 ? ' · ${moneyFor(current.net, s.gameType)}' : ''}',
+                        '${current.handsNet != 0 ? ' · ${moneyFor(current.handsNet, s.gameType)}' : ''}',
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.6)),
