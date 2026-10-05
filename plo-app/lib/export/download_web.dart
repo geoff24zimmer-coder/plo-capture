@@ -21,9 +21,11 @@ void downloadZip(String filename, Map<String, String> files) {
   _save(filename, zipped.toJS, 'application/zip');
 }
 
-/// Download a single text file — the review export (one record per file).
-void downloadText(String filename, String contents) =>
-    _save(filename, contents.toJS, 'application/json');
+/// Download a single text file — the review export (one record per file), the
+/// device backup, the sessions CSV. JSON unless [mime] says otherwise.
+void downloadText(String filename, String contents,
+        {String mime = 'application/json'}) =>
+    _save(filename, contents.toJS, mime);
 
 /// Download raw bytes (e.g. the rendered replay GIF) with an explicit mime.
 void downloadBytes(String filename, Uint8List bytes, String mime) =>

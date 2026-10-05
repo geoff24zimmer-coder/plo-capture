@@ -1,97 +1,77 @@
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../models/session.dart';
-import '../util.dart';
-import 'hand_list_screen.dart';
+import '../tracker/format.dart';
 
-class SessionListScreen extends StatefulWidget {
-  const SessionListScreen({super.key});
-  @override
-  State<SessionListScreen> createState() => _SessionListScreenState();
-}
+typedef SessionRow = ({Session session, int handCount, int handsNet});
 
-class _SessionListScreenState extends State<SessionListScreen> {
-  late Future<List<({Session session, int handCount, int handsNet})>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = HandStore.instance.listSessions();
-  }
-
-  void _refresh() =>
-      setState(() => _future = HandStore.instance.listSessions());
+/// The tracker's Sessions tab: every session newest-first with its result.
+/// The right-hand number is the session result (cash-out − buy-in), never the
+/// sum of captured hands; sessions without a result say so.
+class SessionListView extends StatelessWidget {
+  final List<SessionRow> rows;
+  final Future<void> Function(Session) onOpen;
+  final VoidCallback onChanged;
+  const SessionListView(
+      {super.key,
+      required this.rows,
+      required this.onOpen,
+      required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Past sessions')),
-      body: FutureBuilder(
-        future: _future,
-        builder: (ctx, snap) {
-          if (snap.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Could not load sessions:\n${snap.error}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xFFE24B4A))),
-              ),
-            );
-          }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final rows = snap.data!;
-          if (rows.isEmpty) {
-            return Center(
-              child: Text('No past sessions yet.\nStart one from the home screen.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-            );
-          }
-          return ListView.separated(
-            itemCount: rows.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (ctx, i) {
-              final r = rows[i];
-              final s = r.session;
-              final net = r.handsNet;
-              return ListTile(
-                title: Text('${s.stakesLabel} · ${s.venue}'),
-                subtitle: Text(
-                    '${_dateLabel(s.createdAt)} · ${r.handCount} hands'),
-                trailing: Text(
-                  moneyFor(net, s.gameType),
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: net >= 0
-                        ? const Color(0xFF5DCAA5)
-                        : const Color(0xFFE24B4A),
-                  ),
-                ),
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => HandListScreen(session: s)),
-                  );
-                  _refresh();
-                },
-                onLongPress: () => _confirmDelete(s, r.handCount),
-              );
-            },
-          );
-        },
-      ),
+    if (rows.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+              'No sessions yet.\nStart one from the home screen, or tap '
+              '“Log session” to add one you’ve already played.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 96),
+      itemCount: rows.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (ctx, i) {
+        final r = rows[i];
+        final s = r.session;
+        final net = s.net;
+        final hands = r.handCount == 0
+            ? ''
+            : ' · ${r.handCount} hand${r.handCount == 1 ? '' : 's'}';
+        return ListTile(
+          title: Text('${s.stakesLabel} · ${s.venue}',
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+              '${shortDate(s.createdAt)}, ${s.createdAt.year} · '
+              '${durationLabel(s.duration())}$hands'),
+          trailing: s.isActive
+              ? const _Tag('LIVE', Color(0xFFF0C75A))
+              : net == null
+                  ? const _Tag('ADD RESULT', Color(0xFFEF9F27))
+                  : Text(
+                      usd(net, signed: true),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: net >= 0
+                            ? const Color(0xFF5DCAA5)
+                            : const Color(0xFFE24B4A),
+                      ),
+                    ),
+          onTap: () => onOpen(s),
+          onLongPress: () => _confirmDelete(context, s, r.handCount),
+        );
+      },
     );
   }
 
-  String _dateLabel(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  Future<void> _confirmDelete(Session s, int handCount) async {
+  Future<void> _confirmDelete(
+      BuildContext context, Session s, int handCount) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -116,13 +96,32 @@ class _SessionListScreenState extends State<SessionListScreen> {
     );
     if (yes == true) {
       await HandStore.instance.deleteSession(s.id);
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Session deleted'),
-            duration: Duration(seconds: 2)),
+            content: Text('Session deleted'), duration: Duration(seconds: 2)),
       );
-      _refresh();
+      onChanged();
     }
   }
+}
+
+class _Tag extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _Tag(this.text, this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.7)),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+                color: color)),
+      );
 }

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plo_capture/models/session.dart';
+import 'package:plo_capture/tracker/format.dart';
 import 'package:plo_capture/tracker/stats.dart';
 
 var _n = 0;
@@ -76,6 +77,7 @@ void main() {
 
     test('running total follows end-time order', () {
       expect(st.runningTotal.map((p) => p.total), [50000, 20000, 40000]);
+      expect(st.runningTotal.map((p) => p.hours), [5, 8, 10]);
     });
 
     test('unresolved, active and MTT sessions are excluded', () {
@@ -185,6 +187,37 @@ void main() {
       expect(l.month(2026, 12).net, 20000);
       expect(l.month(2027, 1).net, 0);
       expect(l.month(2027, 1).runningTotal, 20000);
+    });
+  });
+
+  group('format', () {
+    test('parseDollars', () {
+      expect(parseDollars('1500'), 150000);
+      expect(parseDollars(' \$1,500.5 '), 150050);
+      expect(parseDollars('0'), 0);
+      expect(parseDollars(''), isNull);
+      expect(parseDollars('abc'), isNull);
+      expect(parseDollars('-5'), isNull);
+      expect(dollarsField(150050), '1500.50');
+      expect(dollarsField(150000), '1500');
+      expect(dollarsField(null), '');
+    });
+
+    test('display', () {
+      expect(usd(124000), '\$1,240');
+      expect(usd(-1250), '-\$12.50');
+      expect(usd(500, signed: true), '+\$5');
+      expect(usdCompact(42000), '+420');
+      expect(usdCompact(-120000), '-1.2k');
+      expect(usdCompact(100000), '+1k');
+      expect(usdCompact(1500000), '+15k');
+      expect(usdRate(4167.0), '\$42/hr');
+      expect(usdRate(-2549.0), '-\$25/hr');
+      expect(hoursShort(3.25), '3.3');
+      expect(hoursShort(4.0), '4');
+      expect(durationLabel(const Duration(hours: 3, minutes: 5)), '3h 05m');
+      expect(clock(DateTime(2026, 1, 1, 0, 5)), '12:05am');
+      expect(clock(DateTime(2026, 1, 1, 19, 30)), '7:30pm');
     });
   });
 }

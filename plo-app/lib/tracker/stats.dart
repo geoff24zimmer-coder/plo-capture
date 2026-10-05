@@ -45,8 +45,9 @@ class CashStats {
   final Session? best, worst;
   final List<Bucket> byStakes, byVenue, byGame, byWeekday, byLength;
 
-  /// Cumulative net after each session, in end-time order (the graph).
-  final List<({DateTime at, int total})> runningTotal;
+  /// Cumulative net and hours after each session, in end-time order — the
+  /// graph, plotted against hours played so its slope is the hourly rate.
+  final List<({DateTime at, double hours, int total})> runningTotal;
 
   const CashStats({
     required this.sessions,
@@ -127,7 +128,7 @@ CashStats computeCashStats(Iterable<Session> all) {
   final games = <String, Bucket>{};
   final weekdays = {for (final l in weekdayLabels) l: Bucket(l)};
   final lengths = {for (final l in lengthLabels) l: Bucket(l)};
-  final running = <({DateTime at, int total})>[];
+  final running = <({DateTime at, double hours, int total})>[];
 
   void add(Bucket b, Session s, double h) {
     b.sessions++;
@@ -151,7 +152,7 @@ CashStats computeCashStats(Iterable<Session> all) {
     add(games.putIfAbsent(s.gameLabel, () => Bucket(s.gameLabel)), s, h);
     add(weekdays[weekdayLabels[s.createdAt.weekday - 1]]!, s, h);
     add(lengths[_lengthBucket(h)]!, s, h);
-    running.add((at: s.endedAt!, total: net));
+    running.add((at: s.endedAt!, hours: hours, total: net));
   }
 
   final hourly = hours > 0 ? net / hours : null;

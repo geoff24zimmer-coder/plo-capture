@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../models/session.dart';
-import '../util.dart';
+import '../tracker/format.dart';
 import 'capture_screen.dart';
 import 'hand_list_screen.dart';
-import 'session_list_screen.dart';
+import 'tracker_screen.dart';
 
 /// App home. Resume the current (unfinished) session in one tap, or start a new
-/// one; past sessions (history + replay) are one tap away.
+/// one; the tracker (calendar, win rate, every past session) is one tap away.
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
   @override
@@ -65,25 +65,26 @@ class _LandingScreenState extends State<LandingScreen> {
                 color: const Color(0xFFC9A536),
                 onTap: () => _start(context, 'mtt'),
               ),
-              const SizedBox(height: 6),
-              TextButton.icon(
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SessionListScreen()),
-                  );
-                  _load();
-                },
-                icon: const Icon(Icons.history, size: 18),
-                label: const Text('Past sessions'),
-                style: TextButton.styleFrom(
-                    foregroundColor: Colors.white.withValues(alpha: 0.6)),
-              ),
+              const SizedBox(height: 14),
+              Row(children: [
+                Expanded(
+                  child: _ToolButton(
+                    label: 'Tracker',
+                    icon: Icons.calendar_month_outlined,
+                    onTap: () => _push(const TrackerScreen()),
+                  ),
+                ),
+              ]),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _push(Widget screen) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    _load();
   }
 
   Future<void> _resume(Session s) async {
@@ -99,9 +100,14 @@ class _LandingScreenState extends State<LandingScreen> {
     if (session == null) return;
     await HandStore.instance.createSession(session);
     if (!context.mounted) return;
+    // PLO4 goes straight to capturing a hand (the 15-second path); other games
+    // track results only, so they land on the session screen.
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => CaptureScreen(session: session)),
+      MaterialPageRoute(
+          builder: (_) => session.canCaptureHands
+              ? CaptureScreen(session: session)
+              : HandListScreen(session: session)),
     );
     _load();
   }
@@ -113,7 +119,9 @@ class _LandingScreenState extends State<LandingScreen> {
     final venueCtrl = TextEditingController();
     final sbCtrl = TextEditingController(text: '2');
     final bbCtrl = TextEditingController(text: '5');
+    final buyInCtrl = TextEditingController();
     var seats = 8;
+    var game = 'plo4';
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -130,6 +138,15 @@ class _LandingScreenState extends State<LandingScreen> {
                   style:
                       const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
               const SizedBox(height: 14),
+              SegmentedButton<String>(
+                segments: [
+                  for (final e in Session.gameLabels.entries)
+                    ButtonSegment(value: e.key, label: Text(e.value)),
+                ],
+                selected: {game},
+                onSelectionChanged: (v) => setSheet(() => game = v.first),
+              ),
+              const SizedBox(height: 4),
               TextField(
                 controller: venueCtrl,
                 textCapitalization: TextCapitalization.words,
@@ -154,6 +171,15 @@ class _LandingScreenState extends State<LandingScreen> {
                               const InputDecoration(labelText: 'BB \$'))),
                 ]),
               ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: buyInCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                    labelText: isMtt ? 'Buy-in incl. fee (optional)' : 'Buy-in (optional)',
+                    prefixText: '\$ '),
+              ),
               const SizedBox(height: 12),
               Row(children: [
                 const Text('Table size'),
@@ -193,6 +219,8 @@ class _LandingScreenState extends State<LandingScreen> {
           ? (isMtt ? 'Tournament' : 'Cash game')
           : venueCtrl.text.trim(),
       maxSeats: seats,
+      game: game,
+      buyIn: parseDollars(buyInCtrl.text),
     );
   }
 }
@@ -245,8 +273,11 @@ class _ResumeCard extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                               color: Colors.white)),
                       Text(
-                        '$hands hand${hands == 1 ? '' : 's'}'
-                        '${current.handsNet != 0 ? ' · ${moneyFor(current.handsNet, s.gameType)}' : ''}',
+                        [
+                          durationLabel(s.duration()),
+                          if (s.buyIn != null) 'in for ${usd(s.buyIn!)}',
+                          if (hands > 0) '$hands hand${hands == 1 ? '' : 's'}',
+                        ].join(' · '),
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.6)),
@@ -293,4 +324,28 @@ class _StartButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Secondary home-screen destination (Tracker, Equity).
+class _ToolButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _ToolButton(
+      {required this.label, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        label: Text(label,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white.withValues(alpha: 0.85),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+          minimumSize: const Size.fromHeight(50),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
 }
