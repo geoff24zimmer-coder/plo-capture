@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<title>The PLO Show App — Quick Start</title>
 <style>
   @page { size: letter; margin: 14mm 16mm; }
   * { box-sizing: border-box; }
@@ -42,14 +43,15 @@
   .foot { margin-top:16px; padding-top:8px; border-top:1px solid #e2e5e7;
            color:#5b6266; font-size:9.5pt; }
   .nobreak { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
 </style>
 </head>
 <body>
 
   <div class="hero">
-    <img src="plo-app/web/logo.png" alt="The PLO Show — Hand History">
-    <h1>Hand History — Quick Start</h1>
-    <p class="sub">Fast, discreet capture of live 4-card PLO hands. Cash &amp; tournament.</p>
+    <img src="plo-app/web/logo.png" alt="The PLO Show App">
+    <h1>The PLO Show App — Quick Start</h1>
+    <p class="sub">Log live PLO hands in seconds, track every session, and run the equity. Cash &amp; tournament.</p>
     <p><span class="url">hands.theploshow.com</span></p>
   </div>
 
@@ -109,9 +111,28 @@
         (it replays on any phone, no app needed) or <b>Download an MP4/GIF clip</b> to post.</li>
     <li><span class="key">⋮ on a hand</span> → Export for review, or Delete (long-press also deletes).</li>
     <li><span class="key">Export for solver</span> (top-right ⬆) — bundles the session's hands for the
-        Monker&nbsp;Killer solver.</li>
-    <li><span class="key">End</span> — closes out the session; it stays available under <b>Past sessions</b>.</li>
+        Backstage&nbsp;Pass solver.</li>
+    <li><span class="key">All-in EV</span> — replay an all-in to the end to see each player's equity when
+        the money went in, and your expected result next to what actually happened.</li>
+    <li><span class="key">End</span> — closes out the session and asks for your cash-out; it stays in the
+        <b>Tracker</b>.</li>
   </ul>
+
+  <h2>Track every session</h2>
+  <ul class="nobreak">
+    <li>Enter your <b>buy-in</b> when you start (tap <b>Add on</b> for rebuys) and your <b>cash-out</b>
+        when you end — that's what your win rate is built from, whether or not you logged any hands.</li>
+    <li><span class="key">Tracker</span> on the home screen: a <b>calendar</b> with hours and +/- for every
+        day and a month ledger; <b>stats</b> — $/hr, bb/hr, how sure that win rate is, a running total,
+        and breakdowns by stakes, venue and day (tournaments: ROI and in-the-money).</li>
+    <li>Played without the app? <b>Log session</b> adds it after the fact. PLO5 and mixed games can be
+        tracked too.</li>
+  </ul>
+
+  <h2>Equity calculator</h2>
+  <p class="nobreak">Tap <span class="key">Equity</span> on the home screen. Pick <b>PLO</b> or <b>PLO5</b>,
+  enter each player's cards (leave a hand blank for a random one) and a board if there is one. It's
+  exact on the flop and turn and simulates preflop, and always tells you which.</p>
 
   <h2>The end game — your hands feed the solver</h2>
   <div class="callout nobreak">
@@ -135,8 +156,9 @@
 
   <div class="foot nobreak">
     Goal: a logged hand takes about <b>15 seconds</b> of quiet tapping. &nbsp;·&nbsp;
-    Your hands are stored <b>on that device</b> — there's no login or cloud sync yet, so clearing the
-    browser's data clears the hands. Use the share link or MP4 export to keep any you care about.
+    Your sessions and hands are stored <b>on that device</b> — there's no login or cloud sync yet, so
+    clearing the browser's data clears them. <b>Tracker → ⋮ → Download backup</b> saves everything to a
+    file you can restore later.
   </div>
 
 </body>

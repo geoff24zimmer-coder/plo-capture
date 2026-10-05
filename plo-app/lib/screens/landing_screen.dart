@@ -47,7 +47,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 340),
-                    child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+                    child: Image.asset('assets/logo.png',
+                        fit: BoxFit.contain,
+                        semanticLabel: 'The PLO Show App'),
                   ),
                 ),
               ),

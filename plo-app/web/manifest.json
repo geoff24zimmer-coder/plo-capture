@@ -1,11 +1,11 @@
 {
-    "name": "The PLO Show: Hand History",
-    "short_name": "PLO Show HH",
+    "name": "The PLO Show App",
+    "short_name": "PLO Show",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#000000",
-    "description": "Fast tap-based capture of live 4-card PLO preflop hands (cash & MTT).",
+    "description": "Log live PLO hands in 15 seconds, track your sessions and win rate, and run 4- and 5-card Omaha equity.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

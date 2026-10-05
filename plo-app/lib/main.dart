@@ -27,7 +27,7 @@ class PloCaptureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'The PLO Show',
+      title: 'The PLO Show App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
