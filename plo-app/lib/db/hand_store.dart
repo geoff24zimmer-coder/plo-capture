@@ -238,6 +238,16 @@ $_trackerColumns
     ];
   }
 
+  /// Every hand's canonical JSON, oldest first (tracker-wide analysis).
+  Future<List<Map<String, dynamic>>> allHandJsons() async {
+    final rows = await (await db)
+        .query('hands', columns: ['json'], orderBy: 'captured_at');
+    return [
+      for (final r in rows)
+        jsonDecode(r['json'] as String) as Map<String, dynamic>
+    ];
+  }
+
   Future<Map<String, dynamic>> getHand(String handId) async {
     final rows = await (await db)
         .query('hands', columns: ['json'], where: 'hand_id = ?', whereArgs: [handId]);

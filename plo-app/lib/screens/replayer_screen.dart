@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../db/hand_store.dart';
 import '../export/download_web.dart';
 import '../export/gif_export.dart';
+import '../equity/allin_ev.dart';
 import '../export/video_export.dart';
 import '../hand_loader.dart';
 import '../plo_engine.dart';
@@ -43,6 +44,7 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
   LoadedHand? _hand;
   HandEngine? _engine;
   int _step = 0;
+  AllInEv? _allIn; // equity when the money went in (shown on the last step)
 
   // Autoplay: a periodic timer advances one action per tick; the interval is
   // the base step divided by the speed multiplier. Default 2x — the speed the
@@ -77,6 +79,31 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
     });
     // A shared link is meant to play itself — kick off autoplay once loaded.
     if (widget.shared) _play();
+    // After the first frame: a preflop all-in runs a short simulation.
+    await Future<void>.delayed(Duration.zero);
+    final ev = computeAllInEv(loaded);
+    if (mounted && ev.status != AllInStatus.notAllIn &&
+        ev.status != AllInStatus.heroNotInPot) {
+      setState(() => _allIn = ev);
+    }
+  }
+
+  /// "All-in on the turn · BTN 75% · BB 25% · EV +\$51.50 · won −\$100".
+  String? _allInLine(LoadedHand h) {
+    final ev = _allIn;
+    if (ev == null || _step < h.actions.length) return null;
+    if (ev.status == AllInStatus.missingCards) {
+      return 'No all-in EV — a villain’s cards weren’t recorded';
+    }
+    final pct = [
+      for (final e in ev.equity.entries)
+        '${h.positions[e.key] ?? 'Seat ${e.key}'} ${(e.value * 100).toStringAsFixed(ev.exact ? 1 : 0)}%'
+    ].join(' · ');
+    String signed(int v) => '${v > 0 ? '+' : ''}${fmtAmt(v)}';
+    final actual =
+        ev.heroActual == null ? '' : ' · result ${signed(ev.heroActual!)}';
+    return 'All-in ${ev.street!.name == 'preflop' ? 'preflop' : 'on the ${ev.street!.name}'}'
+        ' · $pct · EV ${signed(ev.heroEv!)}$actual';
   }
 
   @override
@@ -392,6 +419,19 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
                             color: Colors.white.withValues(alpha: 0.75)),
                       ),
                     ),
+                    if (_allInLine(h) case final line?)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                        child: Text(
+                          line,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFF0C75A)),
+                        ),
+                      ),
                   ],
                 ),
               ),

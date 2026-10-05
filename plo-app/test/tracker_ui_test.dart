@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:plo_capture/equity/allin_ev.dart';
+import 'package:plo_capture/hand_loader.dart';
+import 'package:plo_capture/hand_recorder.dart';
 import 'package:plo_capture/models/session.dart';
+import 'package:plo_capture/plo_engine.dart';
 import 'package:plo_capture/screens/session_list_screen.dart';
 import 'package:plo_capture/widgets/ledger_calendar.dart';
 import 'package:plo_capture/widgets/session_editor.dart';
@@ -158,5 +162,67 @@ void main() {
     expect(out!.net, 45000);
     expect(out!.hasResult, isTrue);
     expect(out!.hours(), closeTo(4, 1e-9));
+  });
+
+  testWidgets('all-in luck card from captured cash all-ins', (t) async {
+    // Hero's 75% turn jam (EV +5,150) that lost 10,000.
+    const cfg = HandConfig(
+      initialStacks: {1: 10000, 2: 10000, 3: 10000, 4: 10000},
+      buttonSeat: 1,
+      smallBlind: 200,
+      bigBlind: 500,
+      forcedBets: [
+        ForcedBet(2, PostType.sb, 200),
+        ForcedBet(3, PostType.bb, 500),
+      ],
+      straddleRule: StraddleActionRule.sbFirst,
+      heroSeat: 1,
+    );
+    final e = cfg.buildEngine();
+    for (final (s, a, amt) in [
+      (4, ActionType.fold, null),
+      (1, ActionType.call, null),
+      (2, ActionType.fold, null),
+      (3, ActionType.check, null),
+      (3, ActionType.check, null),
+      (1, ActionType.check, null),
+      (3, ActionType.bet, 1200),
+      (1, ActionType.raise, 4800),
+      (3, ActionType.raise, 9500),
+      (1, ActionType.call, null),
+    ]) {
+      e.apply(s, a, amount: amt);
+    }
+    final ev = computeAllInEv(loadHand(buildHandJson(
+      engine: e,
+      cfg: cfg,
+      positions: const {1: 'BTN', 2: 'SB', 3: 'BB', 4: 'UTG'},
+      heroCards: const ['Qh', 'Jh', '3s', '4d'],
+      flop: const ['Ah', 'Kh', '7h'],
+      turnCard: '2c',
+      riverCard: 'Ad',
+      potWinners: const [
+        [3]
+      ],
+      shownCards: const {
+        3: ['7s', '7d', '9c', '8c']
+      },
+    )));
+    await pump(
+        t,
+        TrackerStatsView(
+          sessions: sample(),
+          allIns: [
+            (at: DateTime.now(), cash: true, ev: ev),
+            (at: DateTime.now(), cash: false, ev: ev), // MTT: not counted
+          ],
+        ));
+    await t.scrollUntilVisible(find.text('ALL-IN LUCK'), 200, scrollable: page);
+    await t.scrollUntilVisible(find.textContaining('below expectation'), 100,
+        scrollable: page);
+    expect(find.text('+\$51.50'), findsOneWidget); // expected
+    expect(find.text('-\$100'), findsOneWidget); // actual
+    expect(find.text('You ran \$151.50 below expectation in these spots.'),
+        findsOneWidget);
   });
 }

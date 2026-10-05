@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../equity/allin_ev.dart';
 import '../models/session.dart';
 import '../tracker/format.dart';
 import '../tracker/stats.dart';
@@ -27,7 +28,10 @@ const _periodLabels = {
 /// sample can say) and tournament ROI — kept apart, never blended.
 class TrackerStatsView extends StatefulWidget {
   final List<Session> sessions;
-  const TrackerStatsView({super.key, required this.sessions});
+
+  /// Captured all-ins with their EV (null while still being scored).
+  final List<CapturedAllIn>? allIns;
+  const TrackerStatsView({super.key, required this.sessions, this.allIns});
 
   @override
   State<TrackerStatsView> createState() => _TrackerStatsViewState();
@@ -37,14 +41,18 @@ class _TrackerStatsViewState extends State<TrackerStatsView> {
   bool _mtt = false;
   _Period _period = _Period.all;
 
-  List<Session> get _filtered {
+  DateTime? get _from {
     final now = DateTime.now();
-    final from = switch (_period) {
+    return switch (_period) {
       _Period.all => null,
       _Period.year => DateTime(now.year),
       _Period.d90 => now.subtract(const Duration(days: 90)),
       _Period.month => DateTime(now.year, now.month),
     };
+  }
+
+  List<Session> get _filtered {
+    final from = _from;
     return from == null
         ? widget.sessions
         : widget.sessions.where((s) => !s.createdAt.isBefore(from)).toList();
@@ -158,6 +166,7 @@ class _TrackerStatsViewState extends State<TrackerStatsView> {
         child: RunningTotalChart(points: st.runningTotal),
       ),
       const SizedBox(height: 12),
+      ..._allInLuck(),
       _Card(
         title: 'BEST & WORST',
         child: Column(children: [
@@ -179,6 +188,82 @@ class _TrackerStatsViewState extends State<TrackerStatsView> {
         ],
     ];
   }
+
+  /// How hero's captured all-ins ran against their equity — the part of the
+  /// result that was the deck, not decisions.
+  List<Widget> _allInLuck() {
+    final all = widget.allIns;
+    if (all == null) return const [];
+    final from = _from;
+    final sum = AllInSummary.of([
+      for (final a in all)
+        if (a.cash && (from == null || !a.at.isBefore(from))) a.ev
+    ]);
+    if (sum.hands == 0 && sum.missingCards == 0) return const [];
+    final luck = sum.luck;
+    return [
+      _Card(
+        title: 'ALL-IN LUCK',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (sum.hands > 0) ...[
+              Row(children: [
+                Expanded(
+                    child: _miniStat('ALL-INS', '${sum.hands}')),
+                Expanded(
+                    child: _miniStat('EXPECTED', usd(sum.expected, signed: true))),
+                Expanded(
+                    child: _miniStat('ACTUAL', usd(sum.actual, signed: true))),
+              ]),
+              const SizedBox(height: 10),
+              Text(
+                luck == 0
+                    ? 'Your all-ins ran exactly to expectation.'
+                    : 'You ran ${usd(luck.abs())} ${luck > 0 ? 'above' : 'below'} '
+                        'expectation in these spots.',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700, color: _signColor(luck)),
+              ),
+            ],
+            if (sum.missingCards > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${sum.missingCards} more all-in${sum.missingCards == 1 ? '' : 's'} '
+                  'couldn’t be scored — a villain’s cards weren’t recorded.',
+                  style: TextStyle(fontSize: 12, color: _mutedInk),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'From the cash hands you captured, all-in before the river. '
+                'Your session results above already count everything.',
+                style: TextStyle(fontSize: 12, color: _mutedInk),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+    ];
+  }
+
+  Widget _miniStat(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.1,
+                  fontWeight: FontWeight.w700,
+                  color: _mutedInk)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+        ],
+      );
 
   Widget _sessionLine(String label, Session s) => Row(children: [
         SizedBox(

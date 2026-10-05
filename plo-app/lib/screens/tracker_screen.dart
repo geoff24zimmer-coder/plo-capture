@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../db/hand_store.dart';
+import '../equity/allin_ev.dart';
 import '../export/download_web.dart';
 import '../export/file_pick_web.dart';
+import '../hand_loader.dart';
 import '../models/session.dart';
 import '../tracker/backup.dart';
 import '../widgets/ledger_calendar.dart';
@@ -26,6 +28,7 @@ class TrackerScreen extends StatefulWidget {
 
 class _TrackerScreenState extends State<TrackerScreen> {
   List<SessionRow>? _rows;
+  List<CapturedAllIn>? _allIns; // scored in the background after load
   Object? _error;
 
   @override
@@ -41,6 +44,30 @@ class _TrackerScreenState extends State<TrackerScreen> {
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
+    _scoreAllIns();
+  }
+
+  /// All-in EV for every captured hand that went all-in before the river.
+  /// One hand per microtask so a big history never stalls the UI.
+  Future<void> _scoreAllIns() async {
+    final out = <CapturedAllIn>[];
+    for (final j in await HandStore.instance.allHandJsons()) {
+      try {
+        final ev = computeAllInEv(loadHand(j));
+        if (ev.ok || ev.status == AllInStatus.missingCards) {
+          out.add((
+            at: DateTime.parse(j['captured_at'] as String),
+            cash: (j['session'] as Map?)?['game_type'] != 'mtt',
+            ev: ev,
+          ));
+        }
+      } catch (_) {
+        // An unreadable legacy record just doesn't contribute.
+      }
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+    }
+    setState(() => _allIns = out);
   }
 
   Future<void> _open(Session s) async {
@@ -186,7 +213,7 @@ class _TrackerScreenState extends State<TrackerScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : TabBarView(children: [
                     LedgerCalendar(sessions: sessions, onOpen: _open),
-                    TrackerStatsView(sessions: sessions),
+                    TrackerStatsView(sessions: sessions, allIns: _allIns),
                     SessionListView(
                         rows: rows, onOpen: _open, onChanged: _load),
                   ]),
