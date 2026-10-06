@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../models/hand_session.dart';
 import '../tracker/format.dart';
+import '../widgets/hand_session_sheet.dart';
 import '../widgets/home_actions.dart';
 import 'capture_screen.dart';
 import 'equity_screen.dart';
@@ -9,9 +10,9 @@ import 'hand_list_screen.dart';
 import 'hand_sessions_screen.dart';
 import 'tracker_screen.dart';
 
-/// App home: three separate features. Log played hands (resume the current
-/// hand session in one tap, or start one), the session tracker (results), and
-/// the equity calculator.
+/// App home: log played hands (resume the current hand session in one tap, or
+/// start one) and the past hand sessions, the session tracker (results), and
+/// the equity calculator — separate features, equal-weight buttons.
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
   @override
@@ -69,6 +70,14 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
               const SizedBox(height: 12),
               HomeAction(
+                title: 'Past sessions',
+                subtitle: 'Replay & review your hands',
+                icon: Icons.history,
+                accent: homeViolet,
+                onTap: () => _push(const HandSessionsScreen()),
+              ),
+              const SizedBox(height: 12),
+              HomeAction(
                 title: 'Session tracker',
                 subtitle: 'Results, calendar & win rate',
                 icon: Icons.calendar_month_outlined,
@@ -90,12 +99,10 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  /// "Log played hands" → cash or tournament → the session setup sheet (or
-  /// the past hand sessions).
+  /// "Log played hands" → cash or tournament → the session setup sheet.
   Future<void> _logHands() async {
     final type = await pickGameType(context);
     if (type == null || !mounted) return;
-    if (type == 'past') return _push(const HandSessionsScreen());
     await _start(context, type);
   }
 
@@ -113,7 +120,7 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   Future<void> _start(BuildContext context, String gameType) async {
-    final session = await _sessionSheet(context, gameType);
+    final session = await handSessionSheet(context, gameType: gameType);
     if (session == null) return;
     await HandStore.instance.createHandSession(session);
     if (!context.mounted) return;
@@ -123,109 +130,6 @@ class _LandingScreenState extends State<LandingScreen> {
       MaterialPageRoute(builder: (_) => CaptureScreen(session: session)),
     );
     _load();
-  }
-
-  /// Quick hand-session setup: PLO or PLO5, venue (+ cash stakes), table
-  /// size. No money —
-  /// results belong to the session tracker. Returns the session, or null if
-  /// cancelled.
-  Future<HandSession?> _sessionSheet(
-      BuildContext context, String gameType) async {
-    final isMtt = gameType == 'mtt';
-    final venueCtrl = TextEditingController();
-    final sbCtrl = TextEditingController(text: '2');
-    final bbCtrl = TextEditingController(text: '5');
-    var seats = 8;
-    var game = 'plo4';
-
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, 20, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(isMtt ? 'New tournament' : 'New cash game',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 14),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'plo4', label: Text('PLO')),
-                  ButtonSegment(value: 'plo5', label: Text('PLO5')),
-                ],
-                selected: {game},
-                onSelectionChanged: (v) => setSheet(() => game = v.first),
-              ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: venueCtrl,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                    labelText: isMtt ? 'Tournament / venue' : 'Venue'),
-              ),
-              if (!isMtt) ...[
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                      child: TextField(
-                          controller: sbCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'SB \$'))),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: TextField(
-                          controller: bbCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'BB \$'))),
-                ]),
-              ],
-              const SizedBox(height: 12),
-              Row(children: [
-                const Text('Table size'),
-                Expanded(
-                  child: Slider(
-                    min: 2,
-                    max: 10,
-                    divisions: 8,
-                    value: seats.toDouble(),
-                    label: '$seats',
-                    onChanged: (v) => setSheet(() => seats = v.round()),
-                  ),
-                ),
-                Text('$seats-max'),
-              ]),
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(isMtt ? 'Start tournament' : 'Start cash game'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (ok != true) return null;
-    return HandSession(
-      id: 'session-${DateTime.now().microsecondsSinceEpoch}',
-      createdAt: DateTime.now(),
-      gameType: gameType,
-      smallBlind:
-          isMtt ? 0 : ((double.tryParse(sbCtrl.text) ?? 2) * 100).round(),
-      bigBlind: isMtt ? 0 : ((double.tryParse(bbCtrl.text) ?? 5) * 100).round(),
-      venue: venueCtrl.text.trim().isEmpty
-          ? (isMtt ? 'Tournament' : 'Cash game')
-          : venueCtrl.text.trim(),
-      maxSeats: seats,
-      game: game,
-    );
   }
 }
 

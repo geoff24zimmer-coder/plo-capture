@@ -334,6 +334,26 @@ void main() {
       await store.createHandSession(handSession('new'));
     });
 
+    test('a hand session can be edited in place', () async {
+      final store = await freshStore();
+      await store.createHandSession(handSession('e', ended: ended));
+      final s = (await store.listHandSessions()).single.session;
+      await store.updateHandSession(HandSession(
+        id: s.id,
+        createdAt: s.createdAt,
+        gameType: s.gameType,
+        smallBlind: 500,
+        bigBlind: 1000,
+        venue: 'Texas Card House',
+        maxSeats: 9,
+        endedAt: s.endedAt,
+      ));
+      final got = (await store.listHandSessions()).single.session;
+      expect(got.venue, 'Texas Card House');
+      expect(got.stakesLabel, '\$5/\$10 PLO');
+      expect(got.maxSeats, 9);
+    });
+
     test('hand sessions: a new one ends the current; end clears it', () async {
       final store = await freshStore();
       await store.createHandSession(handSession('one'));

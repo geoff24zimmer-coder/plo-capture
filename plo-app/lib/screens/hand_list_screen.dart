@@ -8,6 +8,7 @@ import '../export/solver_export.dart';
 import '../models/hand_session.dart';
 import '../tracker/format.dart';
 import '../util.dart';
+import '../widgets/hand_session_sheet.dart';
 import 'capture_screen.dart';
 import 'replayer_screen.dart';
 
@@ -43,6 +44,19 @@ class _HandListScreenState extends State<HandListScreen> {
 
   void _refresh() =>
       setState(() => _future = HandStore.instance.handsForSession(_s.id));
+
+  /// Edit venue, stakes, table size and times. PLO/PLO5 is fixed once the
+  /// session has hands; the hands keep their own recorded blinds either way.
+  Future<void> _edit() async {
+    final hasHands =
+        (await HandStore.instance.handsForSession(_s.id)).isNotEmpty;
+    if (!mounted) return;
+    final next = await handSessionSheet(context,
+        gameType: _s.gameType, initial: _s, lockGame: hasHands);
+    if (next == null) return;
+    await HandStore.instance.updateHandSession(next);
+    if (mounted) setState(() => _s = next);
+  }
 
   static String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -197,6 +211,11 @@ class _HandListScreenState extends State<HandListScreen> {
       appBar: AppBar(
         title: Text('${s.stakesLabel} · ${s.venue}'),
         actions: [
+          IconButton(
+            tooltip: 'Edit session',
+            icon: const Icon(Icons.edit_note),
+            onPressed: _edit,
+          ),
           // The solver is 4-card PLO only — no solver exports for PLO5.
           if (!s.isPlo5)
             IconButton(

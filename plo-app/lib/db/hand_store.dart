@@ -186,6 +186,11 @@ $_trackerColumns
     );
   }
 
+  /// Overwrite a hand session's details (venue, stakes, times…). Its hands
+  /// keep their own recorded stakes — the JSON is the source of truth.
+  Future<void> updateHandSession(HandSession s) async => (await db)
+      .update('sessions', s.toRow(), where: 'id = ?', whereArgs: [s.id]);
+
   /// End a hand session so it's no longer the resumable current one.
   Future<void> endHandSession(String id) async => (await db).update(
         'sessions',

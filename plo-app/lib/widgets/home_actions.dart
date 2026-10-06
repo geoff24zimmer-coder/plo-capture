@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 const homeEmerald = Color(0xFF10B981);
 const homeGold = Color(0xFFC9A536);
 const homeBlue = Color(0xFF378ADD);
+const homeViolet = Color(0xFF8B7CF6);
 
 /// A home-screen feature button: accent icon chip, title, one-line subtitle,
 /// chevron. [filled] makes it the primary call to action (solid accent).
@@ -97,8 +98,8 @@ class HomeAction extends StatelessWidget {
   }
 }
 
-/// "Log played hands" sub-menu: cash game or tournament, or the past hand
-/// sessions. Returns `cash`, `mtt`, `past`, or null if dismissed.
+/// "Log played hands" sub-menu: cash game or tournament. Returns `cash`,
+/// `mtt`, or null if dismissed.
 Future<String?> pickGameType(BuildContext context) =>
     showModalBottomSheet<String>(
       context: context,
@@ -142,12 +143,6 @@ Future<String?> pickGameType(BuildContext context) =>
                 accent: homeGold,
                 filled: true,
                 onTap: () => Navigator.pop(ctx, 'mtt'),
-              ),
-              const SizedBox(height: 6),
-              TextButton.icon(
-                onPressed: () => Navigator.pop(ctx, 'past'),
-                icon: const Icon(Icons.history, size: 18),
-                label: const Text('Past sessions'),
               ),
             ],
           ),
