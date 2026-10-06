@@ -87,15 +87,17 @@ to measure this.
 
 ## Roadmap (agreed order)
 
-1. Stats engine over SQLite: PLO-adapted positional frequencies, straddle-pot
-   vs non-straddle win rates, multiway vs HU, split cash/MTT from day one.
-2. Per-seat stack editing on the seat ring (long-press). (Side-pot/split-pot
+The sell for logging hands is uploading them into our solver — not in-app
+stats. The hand-stats engine was dropped (2026-10-05); don't re-propose
+stats or review features built from logged hands (a biased sample anyway).
+
+1. Per-seat stack editing on the seat ring (long-press). (Side-pot/split-pot
    math shipped: `engine.computePots()` layers totalCommit into main/side
    pots with uncalled-bet return; recorder serializes multi-pot + split
    winners; capture UI resolves pots by tap, chops by multi-tap.)
-3. MTT depth: ICM context, bounties, payout structures (data already
+2. MTT depth: ICM context, bounties, payout structures (data already
    captured).
-4. Export/aggregation layer: suit-isomorphism normalization, per-node
+3. Export/aggregation layer: suit-isomorphism normalization, per-node
    population frequencies for solver node-locking.
 
 ## Known scaffold pragmatism
