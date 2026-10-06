@@ -153,6 +153,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             )
           : null,
       playersRemaining: _isMtt ? int.tryParse(_playersCtrl.text) : null,
+      variant: widget.session.game,
     );
   }
 
@@ -189,7 +190,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// turn to act. Cancelling the card picker leaves the seat unclaimed.
   Future<void> _claimHeroAt(int seat) async {
     final cards = await pickCards(context,
-        count: 4, excluded: {}, title: 'Your cards');
+        count: widget.session.holeSize, excluded: {}, title: 'Your cards');
     if (cards == null) return;
     HapticFeedback.selectionClick();
     setState(() {
@@ -340,13 +341,15 @@ class _CaptureScreenState extends State<CaptureScreen> {
     });
   }
 
-  /// Enter the cards a still-in villain showed (full 4-card reveal). The hero's
+  /// Enter the cards a still-in villain showed (a full reveal). The hero's
   /// cards are already known; blank seats stay mucked/unknown.
   Future<void> _enterShownCards(int seat) async {
     final e = _engine!;
     if (seat == _heroSeat || !e.activeSeats.contains(seat)) return;
     final cards = await pickCards(context,
-        count: 4, excluded: _knownCards(), title: '${_positions[seat]} shows');
+        count: widget.session.holeSize,
+        excluded: _knownCards(),
+        title: '${_positions[seat]} shows');
     if (cards == null) return;
     setState(() => _shownCards[seat] = cards);
   }
@@ -690,14 +693,17 @@ class _CaptureScreenState extends State<CaptureScreen> {
                       // Export this decision spot for review (Monker Killer
                       // IMPORT HAND). Copies the raw complete:false record; the
                       // review importer treats the hero's action as optional.
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton.icon(
-                          onPressed: () => _copyJson(complete: false),
-                          icon: const Icon(Icons.content_copy, size: 16),
-                          label: const Text('Copy spot JSON (for Import Hand)'),
+                      // The solver is 4-card only, so not for PLO5.
+                      if (!widget.session.isPlo5)
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton.icon(
+                            onPressed: () => _copyJson(complete: false),
+                            icon: const Icon(Icons.content_copy, size: 16),
+                            label:
+                                const Text('Copy spot JSON (for Import Hand)'),
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 8),
                     ],
                     _actionPanel(),

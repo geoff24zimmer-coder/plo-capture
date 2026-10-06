@@ -29,6 +29,7 @@ enum RefusalReason {
   offBandStraddle, // straddle ratio outside the accepted 2x band
   noHeroAction, // hand ended before the hero made a voluntary decision
   illegalReplay, // actions don't replay legally (corrupt/foreign capture)
+  notPlo4, // a PLO5 hand — the solver is 4-card only
 }
 
 /// Fidelity of a placed hand against the canonical 100bb / 2x-straddle target.
@@ -187,6 +188,7 @@ _Outcome _placeHand(Map<String, dynamic> j) {
     return const _Outcome.refused(RefusalReason.illegalReplay);
   }
   final cfg = lh.cfg;
+  if (cfg.variant != 'plo4') return const _Outcome.refused(RefusalReason.notPlo4);
   final heroSeat = cfg.heroSeat;
   final bb = cfg.bigBlind;
   if (bb <= 0) return const _Outcome.refused(RefusalReason.illegalReplay);

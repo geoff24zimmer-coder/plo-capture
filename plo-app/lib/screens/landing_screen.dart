@@ -125,7 +125,8 @@ class _LandingScreenState extends State<LandingScreen> {
     _load();
   }
 
-  /// Quick hand-session setup: venue (+ cash stakes) + table size. No money —
+  /// Quick hand-session setup: PLO or PLO5, venue (+ cash stakes), table
+  /// size. No money —
   /// results belong to the session tracker. Returns the session, or null if
   /// cancelled.
   Future<HandSession?> _sessionSheet(
@@ -135,6 +136,7 @@ class _LandingScreenState extends State<LandingScreen> {
     final sbCtrl = TextEditingController(text: '2');
     final bbCtrl = TextEditingController(text: '5');
     var seats = 8;
+    var game = 'plo4';
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -150,6 +152,15 @@ class _LandingScreenState extends State<LandingScreen> {
               Text(isMtt ? 'New tournament' : 'New cash game',
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 14),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'plo4', label: Text('PLO')),
+                  ButtonSegment(value: 'plo5', label: Text('PLO5')),
+                ],
+                selected: {game},
+                onSelectionChanged: (v) => setSheet(() => game = v.first),
+              ),
               const SizedBox(height: 4),
               TextField(
                 controller: venueCtrl,
@@ -213,6 +224,7 @@ class _LandingScreenState extends State<LandingScreen> {
           ? (isMtt ? 'Tournament' : 'Cash game')
           : venueCtrl.text.trim(),
       maxSeats: seats,
+      game: game,
     );
   }
 }

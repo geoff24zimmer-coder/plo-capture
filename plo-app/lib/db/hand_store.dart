@@ -56,7 +56,7 @@ $_trackerColumns
             : p.join(await getDatabasesPath(), 'plo_capture.db'));
     _db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onUpgrade: (d, oldV, newV) async {
         // v2: tag decision spots (hands saved mid-action) for the hand list.
         if (oldV < 2) {
@@ -76,6 +76,15 @@ $_trackerColumns
         // v5: the tracker and hand logging separate. Results move to their own
         // table; `sessions` keeps only hand sessions (see tracker/split.dart).
         if (oldV < 5) await _splitTracker(d);
+        // v6: hand sessions can be PLO5. Databases that came through the
+        // v4 tracker columns already have a `game` column (all 'plo4').
+        if (oldV < 6) {
+          final cols = await d.rawQuery('PRAGMA table_info(sessions)');
+          if (!cols.any((c) => c['name'] == 'game')) {
+            await d.execute(
+                "ALTER TABLE sessions ADD COLUMN game TEXT NOT NULL DEFAULT 'plo4'");
+          }
+        }
       },
       onCreate: (d, v) async {
         await d.execute('''
@@ -87,7 +96,8 @@ $_trackerColumns
             bb INTEGER NOT NULL,
             venue TEXT NOT NULL,
             max_seats INTEGER NOT NULL,
-            ended_at INTEGER
+            ended_at INTEGER,
+            game TEXT NOT NULL DEFAULT 'plo4'
           )
         ''');
         await d.execute(_trackerTable);

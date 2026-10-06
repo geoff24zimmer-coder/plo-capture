@@ -2,8 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://yourapp.com/schemas/plo-hand-history/v1.json",
   "title": "PLO Live Hand History",
-  "description": "Canonical event-sourced record of a single live 4-card Pot Limit Omaha hand. Designed for fast mobile capture, partial information, straddle-heavy live games, and direct ingestion into solver pipelines. All monetary amounts are integers in the smallest currency unit (cents) or in chips for MTT.",
+  "description": "Canonical event-sourced record of a single live 4- or 5-card Pot Limit Omaha hand (session.variant plo4 | plo5). Designed for fast mobile capture, partial information, straddle-heavy live games, and direct ingestion into solver pipelines. All monetary amounts are integers in the smallest currency unit (cents) or in chips for MTT.",
   "type": "object",
+  "if": {
+    "properties": { "session": { "properties": { "variant": { "const": "plo5" } } } }
+  },
+  "then": {
+    "properties": { "hero": { "properties": { "cards": { "minItems": 5 } } } }
+  },
+  "else": {
+    "properties": { "hero": { "properties": { "cards": { "maxItems": 4 } } } }
+  },
   "required": [
     "schema_version",
     "hand_id",
@@ -46,8 +55,8 @@
           ]
         },
         "variant": {
-          "const": "plo4",
-          "description": "4-card PLO only."
+          "enum": ["plo4", "plo5"],
+          "description": "4-card PLO or 5-card PLO. Only the hole-card count differs; betting is the same pot-limit game. Consumers that handle one variant must check this (the solver is plo4-only)."
         },
         "venue": {
           "type": "string"
@@ -248,11 +257,11 @@
         "cards": {
           "type": "array",
           "minItems": 4,
-          "maxItems": 4,
+          "maxItems": 5,
           "items": {
             "$ref": "#/$defs/card"
           },
-          "description": "Literal cards as dealt. Suit isomorphism is applied at the analysis layer, never at capture."
+          "description": "Literal cards as dealt: 4 for plo4, 5 for plo5 (enforced by the root if/then). Suit isomorphism is applied at the analysis layer, never at capture."
         }
       }
     },

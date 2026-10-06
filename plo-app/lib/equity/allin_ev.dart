@@ -85,7 +85,7 @@ AllInEv computeAllInEv(LoadedHand h, {int samples = allInSamples}) {
   try {
     for (final s in live) {
       final raw = s == hero ? h.heroCards : h.shownCards[s];
-      if (raw == null || raw.length != 4) {
+      if (raw == null || raw.length != h.cfg.holeSize) {
         return const AllInEv.none(AllInStatus.missingCards);
       }
       cards[s] = raw.map(parseCard).toList();
@@ -127,7 +127,7 @@ AllInEv computeAllInEv(LoadedHand h, {int samples = allInSamples}) {
           for (final s in live)
             if (!contest.contains(s)) ...cards[s]!
         ],
-        holeSize: 4,
+        holeSize: h.cfg.holeSize,
         rng: rng,
       ).runAll(samples: samples);
       exact = exact && r.exact;

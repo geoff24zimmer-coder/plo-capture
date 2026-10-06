@@ -51,11 +51,11 @@ String moneyFor(int amount, String gameType) {
   return out;
 }
 
-/// Compact, scannable label for a saved hand: hero position, the four
-/// hole-card ranks (high→low, `T` for ten) and the PLO suit shape —
-/// e.g. `MP · AAKK ds`. Suit shapes: `ds` double-suited (2-2),
-/// `ss` single-suited (2-1-1), `r` rainbow (1-1-1-1), `ts` three of a suit
-/// (3-1), `mono` four of a suit. Derived from the stored canonical JSON, so it
+/// Compact, scannable label for a saved hand: hero position, the hole-card
+/// ranks (high→low, `T` for ten) and the suit shape — e.g. `MP · AAKK ds`,
+/// `CO · AKQJT ds` (PLO5). Suit shapes: `ds` double-suited (two pairs of a
+/// suit), `ss` single-suited (one pair), `r` rainbow, `ts` three or more of a
+/// suit, `mono` all one suit. Derived from the stored canonical JSON, so it
 /// labels hands captured before this label existed too.
 String handLabel(Map<String, dynamic> json) {
   final hero = json['hero'] as Map<String, dynamic>?;
@@ -80,7 +80,13 @@ String handLabel(Map<String, dynamic> json) {
   final desc = counts.values.toList()..sort((a, b) => b - a);
   final shape = (desc.length >= 2 && desc[0] == 2 && desc[1] == 2)
       ? 'ds'
-      : switch (desc.first) { 4 => 'mono', 3 => 'ts', 2 => 'ss', _ => 'r' };
+      : desc.first == cards.length
+          ? 'mono'
+          : desc.first >= 3
+              ? 'ts'
+              : desc.first == 2
+                  ? 'ss'
+                  : 'r';
   return '$pos · ${ranks.join()} $shape';
 }
 

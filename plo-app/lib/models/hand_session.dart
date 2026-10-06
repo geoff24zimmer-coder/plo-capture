@@ -13,6 +13,10 @@ class HandSession {
   final int maxSeats;
   final DateTime? endedAt; // null = active; the resumable "current" session
 
+  /// `plo4` | `plo5` — how many hole cards each player holds. The betting
+  /// engine is the same pot-limit machine either way.
+  final String game;
+
   const HandSession({
     required this.id,
     required this.createdAt,
@@ -22,6 +26,7 @@ class HandSession {
     required this.venue,
     required this.maxSeats,
     this.endedAt,
+    this.game = 'plo4',
   });
 
   bool get isMtt => gameType == 'mtt';
@@ -34,9 +39,16 @@ class HandSession {
     return d.isNegative ? Duration.zero : d;
   }
 
+  bool get isPlo5 => game == 'plo5';
+
+  /// Hole cards per player.
+  int get holeSize => isPlo5 ? 5 : 4;
+
+  String get gameLabel => isPlo5 ? 'PLO5' : 'PLO';
+
   String get stakesLabel => isMtt
-      ? 'MTT PLO'
-      : '${_dollars(smallBlind)}/${_dollars(bigBlind)} PLO';
+      ? 'MTT $gameLabel'
+      : '${_dollars(smallBlind)}/${_dollars(bigBlind)} $gameLabel';
 
   static String _dollars(int cents) => cents % 100 == 0
       ? '\$${cents ~/ 100}'
@@ -51,6 +63,7 @@ class HandSession {
         venue: venue,
         maxSeats: maxSeats,
         endedAt: at,
+        game: game,
       );
 
   Map<String, dynamic> toRow() => {
@@ -62,9 +75,12 @@ class HandSession {
         'venue': venue,
         'max_seats': maxSeats,
         'ended_at': endedAt?.millisecondsSinceEpoch,
+        'game': game,
       };
 
-  /// Ignores any tracker columns on the row (pre-split databases and backups).
+  /// Ignores any tracker columns on the row (pre-split databases and backups);
+  /// anything but `plo5` is a PLO4 session (older rows have no game, or the
+  /// tracker's).
   static HandSession fromRow(Map<String, dynamic> r) => HandSession(
         id: r['id'] as String,
         createdAt: DateTime.fromMillisecondsSinceEpoch(r['created_at'] as int),
@@ -76,5 +92,6 @@ class HandSession {
         endedAt: r['ended_at'] == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(r['ended_at'] as int),
+        game: r['game'] == 'plo5' ? 'plo5' : 'plo4',
       );
 }

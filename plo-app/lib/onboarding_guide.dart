@@ -57,7 +57,7 @@ final List<_Step> _steps = [
     _b('not'),
     _t(' pick your seat first. When the pointer reaches your spot, tap '),
     _b('“This is me”'),
-    _t(' and choose your four cards. That’s the whole trick.'),
+    _t(' and choose your cards. That’s the whole trick.'),
   ]),
   _Step(Icons.casino, _green, '4 · Play the hand out', [
     _t('Every hand plays out fully — cash and tournament. As each street '

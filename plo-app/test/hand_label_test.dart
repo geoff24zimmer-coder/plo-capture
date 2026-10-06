@@ -36,6 +36,17 @@ void main() {
     expect(handLabel(rec('HJ', ['7d', 'Tc', '9c', '8d'])), 'HJ · T987 ds');
   });
 
+  test('PLO5: five ranks; shapes by suit pairs', () {
+    expect(handLabel(rec('CO', ['Ah', 'As', 'Kh', 'Ks', 'Qd'])),
+        'CO · AAKKQ ds'); // 2-2-1
+    expect(handLabel(rec('CO', ['Ah', 'Kh', 'Qs', 'Jd', 'Tc'])),
+        'CO · AKQJT ss'); // 2-1-1-1 (5 cards can't be rainbow)
+    expect(handLabel(rec('CO', ['Ah', 'Kh', 'Qh', 'Js', 'Ts'])),
+        'CO · AKQJT ts'); // 3-2
+    expect(handLabel(rec('CO', ['Ah', 'Kh', 'Qh', 'Jh', 'Th'])),
+        'CO · AKQJT mono');
+  });
+
   test('no cards (defensive) → position only', () {
     expect(handLabel(rec('UTG', const [])), 'UTG');
   });

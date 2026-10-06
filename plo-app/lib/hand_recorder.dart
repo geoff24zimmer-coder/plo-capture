@@ -30,6 +30,11 @@ class HandConfig {
   final MttLevel? mttLevel; // required when gameType == 'mtt'
   final int? playersRemaining;
 
+  /// `plo4` | `plo5`. Only the hole-card count differs; the betting engine is
+  /// the same pot-limit machine.
+  final String variant;
+  int get holeSize => variant == 'plo5' ? 5 : 4;
+
   const HandConfig({
     required this.initialStacks,
     required this.buttonSeat,
@@ -41,6 +46,7 @@ class HandConfig {
     this.gameType = 'cash',
     this.mttLevel,
     this.playersRemaining,
+    this.variant = 'plo4',
   });
 
   HandEngine buildEngine() => HandEngine(
@@ -198,7 +204,7 @@ Map<String, dynamic> buildHandJson({
     'session': {
       'session_id': sessionId ?? 'session-local',
       'game_type': cfg.gameType,
-      'variant': 'plo4',
+      'variant': cfg.variant,
       if (cfg.gameType == 'cash') 'currency': 'USD',
       if (cfg.gameType == 'cash')
         'stakes': {'sb': cfg.smallBlind, 'bb': cfg.bigBlind}

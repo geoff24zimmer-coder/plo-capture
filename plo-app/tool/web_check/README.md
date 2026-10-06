@@ -23,4 +23,5 @@ cd tool/web_check && node check_home.mjs              # screenshots land here
   metadata · `check_quick.mjs` the "start then immediately end" session · `check_stacks.mjs`
   long-press a seat → set its stack; a refused edit; undo then re-edit. ·
   `check_split.mjs` tracker/hand-log separation incl. the real upgrade: `seed`
-  an OLD build, then `verify` the new one on the same `profile` (launch option).
+  an OLD build, then `verify` the new one on the same `profile` (launch option). ·
+  `check_plo5.mjs` PLO5 setup → claim seat → five-card picker → table.

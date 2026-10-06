@@ -235,7 +235,8 @@ void main() {
                   'is_spot INTEGER NOT NULL DEFAULT 0, json TEXT NOT NULL)');
             },
           ));
-      await old.insert('sessions', handSession('old', ended: ended).toRow());
+      await old.insert('sessions',
+          handSession('old', ended: ended).toRow()..remove('game'));
       await old.close();
 
       final store = HandStore.atPath(path);
@@ -267,6 +268,70 @@ void main() {
       final raw = await (await store.db).query('sessions');
       expect(raw.every((r) => r['buy_in'] == null && r['cash_out'] == null),
           isTrue);
+    });
+
+    test('a PLO5 hand session keeps its game through store and backup',
+        () async {
+      final store = await freshStore();
+      final five = HandSession(
+        id: 'p5',
+        createdAt: DateTime(2026, 10, 6, 19),
+        gameType: 'cash',
+        smallBlind: 500,
+        bigBlind: 1000,
+        venue: 'Lodge',
+        maxSeats: 8,
+        game: 'plo5',
+      );
+      await store.createHandSession(five);
+      final got = (await store.listHandSessions()).single.session;
+      expect(got.game, 'plo5');
+      expect(got.holeSize, 5);
+      expect(got.stakesLabel, '\$5/\$10 PLO5');
+
+      final back = parseBackup(jsonEncode(await store.exportAll()));
+      expect(back.handSessions.single.game, 'plo5');
+    });
+
+    test('a v5 database gains the hand-session game column', () async {
+      final dir = await Directory.systemTemp.createTemp('plo_store');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = '${dir.path}/v5.db';
+      final old = await databaseFactoryFfi.openDatabase(path,
+          options: OpenDatabaseOptions(
+            version: 5,
+            onCreate: (d, v) async {
+              await d.execute('CREATE TABLE sessions (id TEXT PRIMARY KEY, '
+                  'created_at INTEGER NOT NULL, game_type TEXT NOT NULL, '
+                  'sb INTEGER NOT NULL, bb INTEGER NOT NULL, venue TEXT NOT NULL, '
+                  'max_seats INTEGER NOT NULL, ended_at INTEGER)');
+              await d.execute('CREATE TABLE tracker_sessions (id TEXT PRIMARY KEY, '
+                  'created_at INTEGER NOT NULL, game_type TEXT NOT NULL, '
+                  'sb INTEGER NOT NULL, bb INTEGER NOT NULL, venue TEXT NOT NULL, '
+                  'max_seats INTEGER NOT NULL, ended_at INTEGER, '
+                  "game TEXT NOT NULL DEFAULT 'plo4', buy_in INTEGER, "
+                  "cash_out INTEGER, notes TEXT NOT NULL DEFAULT '', "
+                  'mtt_finish INTEGER, mtt_entrants INTEGER)');
+              await d.execute('CREATE TABLE hands (hand_id TEXT PRIMARY KEY, '
+                  'session_id TEXT NOT NULL, captured_at INTEGER NOT NULL, '
+                  'hero_net INTEGER, pot INTEGER, marked INTEGER NOT NULL DEFAULT 0, '
+                  'is_spot INTEGER NOT NULL DEFAULT 0, json TEXT NOT NULL)');
+            },
+          ));
+      await old.insert('sessions', {
+        'id': 'v5',
+        'created_at': 0,
+        'game_type': 'cash',
+        'sb': 200,
+        'bb': 500,
+        'venue': 'Lodge',
+        'max_seats': 8,
+      });
+      await old.close();
+
+      final store = HandStore.atPath(path);
+      expect((await store.listHandSessions()).single.session.game, 'plo4');
+      await store.createHandSession(handSession('new'));
     });
 
     test('hand sessions: a new one ends the current; end clears it', () async {

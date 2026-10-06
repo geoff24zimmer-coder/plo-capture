@@ -85,6 +85,60 @@ void main() {
     expect(ev.luck, -15150);
   });
 
+  test('PLO5: the same turn all-in with five cards each', () {
+    final cfg = cfg4({1: 10000, 2: 10000, 3: 10000, 4: 10000});
+    final h = play(
+      HandConfig(
+        initialStacks: cfg.initialStacks,
+        buttonSeat: cfg.buttonSeat,
+        smallBlind: cfg.smallBlind,
+        bigBlind: cfg.bigBlind,
+        forcedBets: cfg.forcedBets,
+        straddleRule: cfg.straddleRule,
+        heroSeat: cfg.heroSeat,
+        variant: 'plo5',
+      ),
+      turnJam(),
+      hero: ['Qh', 'Jh', '3s', '4d', '5c'],
+      shown: {3: ['7s', '7d', '9c', '8c', '6c']},
+      board: ['Ah', 'Kh', '7h', '2c', 'Ad'],
+      potWinners: [
+        [3]
+      ],
+    );
+    expect(h.cfg.variant, 'plo5'); // round-trips through the stored JSON
+    expect(h.heroCards, hasLength(5));
+    final ev = computeAllInEv(h);
+    expect(ev.status, AllInStatus.ok);
+    expect(ev.exact, isTrue);
+    // 38 unseen rivers; the set fills up on 10 (3 A, 3 K, 3 deuces, 7c).
+    expect(ev.equity[1], closeTo(28 / 38, 1e-12));
+  });
+
+  test('PLO5: a shown 4-card hand is not enough to score', () {
+    final cfg = cfg4({1: 10000, 2: 10000, 3: 10000, 4: 10000});
+    final h = play(
+      HandConfig(
+        initialStacks: cfg.initialStacks,
+        buttonSeat: cfg.buttonSeat,
+        smallBlind: cfg.smallBlind,
+        bigBlind: cfg.bigBlind,
+        forcedBets: cfg.forcedBets,
+        straddleRule: cfg.straddleRule,
+        heroSeat: cfg.heroSeat,
+        variant: 'plo5',
+      ),
+      turnJam(),
+      hero: ['Qh', 'Jh', '3s', '4d', '5c'],
+      shown: {3: ['7s', '7d', '9c', '8c']},
+      board: ['Ah', 'Kh', '7h', '2c', 'Ad'],
+      potWinners: [
+        [3]
+      ],
+    );
+    expect(computeAllInEv(h).status, AllInStatus.missingCards);
+  });
+
   test('side pots are scored pot by pot, other hands dead', () {
     // SB (2,000) jams the turn, BB raises, hero (BTN) re-jams, BB calls:
     // main 6,000 three-way, side 16,000 hero vs BB.

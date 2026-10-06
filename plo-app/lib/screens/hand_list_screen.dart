@@ -141,6 +141,7 @@ class _HandListScreenState extends State<HandListScreen> {
           RefusalReason.offBandStraddle => 'Off-band straddle size',
           RefusalReason.noHeroAction => 'Hero never acted',
           RefusalReason.illegalReplay => 'Could not replay',
+          RefusalReason.notPlo4 => 'PLO5 (the solver is 4-card only)',
         };
     final refused = b.refusals.entries.where((e) => e.value > 0).toList();
     await showDialog<void>(
@@ -196,11 +197,13 @@ class _HandListScreenState extends State<HandListScreen> {
       appBar: AppBar(
         title: Text('${s.stakesLabel} · ${s.venue}'),
         actions: [
-          IconButton(
-            tooltip: 'Export for solver',
-            icon: const Icon(Icons.ios_share),
-            onPressed: _exportForSolver,
-          ),
+          // The solver is 4-card PLO only — no solver exports for PLO5.
+          if (!s.isPlo5)
+            IconButton(
+              tooltip: 'Export for solver',
+              icon: const Icon(Icons.ios_share),
+              onPressed: _exportForSolver,
+            ),
           if (s.isActive)
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -315,14 +318,15 @@ class _HandListScreenState extends State<HandListScreen> {
                         if (v == 'review') _exportHandForReview(id);
                         if (v == 'delete') _confirmDeleteRow(id);
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                            value: 'review',
-                            child: ListTile(
-                                leading: Icon(Icons.ios_share, size: 20),
-                                title: Text('Export for review'),
-                                contentPadding: EdgeInsets.zero)),
-                        PopupMenuItem(
+                      itemBuilder: (_) => [
+                        if (!_s.isPlo5) // the solver is 4-card only
+                          const PopupMenuItem(
+                              value: 'review',
+                              child: ListTile(
+                                  leading: Icon(Icons.ios_share, size: 20),
+                                  title: Text('Export for review'),
+                                  contentPadding: EdgeInsets.zero)),
+                        const PopupMenuItem(
                             value: 'delete',
                             child: ListTile(
                                 leading: Icon(Icons.delete_outline, size: 20),

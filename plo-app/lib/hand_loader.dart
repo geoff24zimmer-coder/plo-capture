@@ -93,6 +93,7 @@ LoadedHand loadHand(Map<String, dynamic> j) {
         ? StraddleActionRule.sbFirst
         : StraddleActionRule.utgFirstStraddlerLast,
     heroSeat: hero['seat'] as int,
+    variant: session['variant'] == 'plo5' ? 'plo5' : 'plo4',
   );
 
   final board = j['board'] as Map<String, dynamic>? ?? {};

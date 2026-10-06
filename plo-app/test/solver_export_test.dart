@@ -98,6 +98,26 @@ void main() {
           'HAND,FREQ,EV\n');
     });
 
+    test('a PLO5 hand is refused — the solver is 4-card only', () {
+      final hand = makeHand(
+        stacks: _hundredBb,
+        buttonSeat: 1,
+        sb: 200,
+        bb: 500,
+        heroSeat: 8,
+        forced: const [ForcedBet(2, PostType.sb, 200), ForcedBet(3, PostType.bb, 500)],
+        positions: _noStrPos,
+        heroCards: const ['Ah', 'As', 'Kh', 'Qd'],
+        actions: _foldsThenHeroOpen(heroAct: ActionType.raise, heroAmount: 1500),
+      );
+      hand['session']['variant'] = 'plo5';
+      (hand['hero'] as Map)['cards'] = ['Ah', 'As', 'Kh', 'Qd', 'Jc'];
+
+      final b = exportPopulation([hand], capturedThrough: '2026-06-10');
+      expect(b.acceptedHands, 0);
+      expect(b.refusals[RefusalReason.notPlo4], 1);
+    });
+
     test('limp anywhere before the hero is refused (no-limp trees)', () {
       final hand = makeHand(
         stacks: _hundredBb,
