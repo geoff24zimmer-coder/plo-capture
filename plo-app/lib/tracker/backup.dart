@@ -9,13 +9,19 @@ library;
 
 import 'dart:convert';
 
+import '../models/hand_session.dart';
 import '../models/session.dart';
+import 'split.dart';
 
 const backupFormat = 'plo-show-backup';
-const backupVersion = 1;
+
+/// 2: tracker sessions and hand sessions kept apart. 1 (before 2026-10-06):
+/// one combined `sessions` list — split on restore (see `split.dart`).
+const backupVersion = 2;
 
 Map<String, dynamic> buildBackup({
-  required List<Session> sessions,
+  required List<Session> trackerSessions,
+  required List<HandSession> handSessions,
   required List<Map<String, dynamic>> hands,
   DateTime? now,
 }) =>
@@ -23,26 +29,55 @@ Map<String, dynamic> buildBackup({
       'format': backupFormat,
       'version': backupVersion,
       'exported_at': (now ?? DateTime.now()).toUtc().toIso8601String(),
-      'sessions': [for (final s in sessions) s.toRow()],
+      'tracker_sessions': [for (final s in trackerSessions) s.toRow()],
+      'hand_sessions': [for (final s in handSessions) s.toRow()],
       'hands': hands,
     };
 
 class BackupData {
-  final List<Session> sessions;
+  final List<Session> trackerSessions;
+  final List<HandSession> handSessions;
   final List<Map<String, dynamic>> hands;
   final DateTime? exportedAt;
-  const BackupData(
-      {required this.sessions, required this.hands, this.exportedAt});
+  const BackupData({
+    required this.trackerSessions,
+    required this.handSessions,
+    required this.hands,
+    this.exportedAt,
+  });
 }
 
 class ImportSummary {
-  final int sessionsAdded, sessionsSkipped, handsAdded, handsSkipped;
+  final int trackerAdded, trackerSkipped;
+  final int handSessionsAdded, handSessionsSkipped;
+  final int handsAdded, handsSkipped;
   const ImportSummary({
-    required this.sessionsAdded,
-    required this.sessionsSkipped,
+    required this.trackerAdded,
+    required this.trackerSkipped,
+    required this.handSessionsAdded,
+    required this.handSessionsSkipped,
     required this.handsAdded,
     required this.handsSkipped,
   });
+
+  int get skipped => trackerSkipped + handSessionsSkipped + handsSkipped;
+}
+
+List<Map<String, dynamic>> _rows(Object? raw, String what) {
+  if (raw is! List) throw FormatException('Backup is missing its $what.');
+  try {
+    return [for (final r in raw) Map<String, dynamic>.from(r as Map)];
+  } catch (_) {
+    throw FormatException('Backup contains an unreadable $what entry.');
+  }
+}
+
+T _parse<T>(T Function() f, String what) {
+  try {
+    return f();
+  } catch (_) {
+    throw FormatException('Backup contains an unreadable $what.');
+  }
 }
 
 /// Parse and validate a backup file. Throws [FormatException] with a
@@ -63,37 +98,48 @@ BackupData parseBackup(String text) {
     throw const FormatException(
         'This backup is from a newer version of the app — update first.');
   }
-  final rawSessions = doc['sessions'];
-  final rawHands = doc['hands'];
-  if (rawSessions is! List || rawHands is! List) {
-    throw const FormatException('Backup is missing its sessions or hands.');
-  }
-  final sessions = <Session>[];
-  for (final r in rawSessions) {
-    try {
-      sessions.add(Session.fromRow(Map<String, dynamic>.from(r as Map)));
-    } catch (_) {
-      throw const FormatException('Backup contains an unreadable session.');
-    }
-  }
-  final sessionIds = {for (final s in sessions) s.id};
+
   final hands = <Map<String, dynamic>>[];
-  for (final h in rawHands) {
-    if (h is! Map<String, dynamic> ||
-        h['hand_id'] is! String ||
+  for (final h in _rows(doc['hands'], 'hands')) {
+    if (h['hand_id'] is! String ||
         h['captured_at'] is! String ||
         DateTime.tryParse(h['captured_at'] as String) == null ||
         (h['session'] as Map?)?['session_id'] is! String) {
       throw const FormatException('Backup contains an unreadable hand.');
     }
-    if (!sessionIds.contains(h['session']['session_id'])) {
-      throw const FormatException(
-          'Backup contains a hand whose session is missing.');
-    }
     hands.add(h);
   }
+  final handSessionIds = {
+    for (final h in hands) h['session']['session_id'] as String
+  };
+
+  final List<Session> tracker;
+  final List<HandSession> handSessions;
+  if (version == 1) {
+    final rows = _rows(doc['sessions'], 'sessions');
+    final split = _parse(
+        () => splitLegacySessions(rows, withHands: handSessionIds), 'session');
+    tracker = split.tracker;
+    handSessions = split.handLogs;
+  } else {
+    tracker = [
+      for (final r in _rows(doc['tracker_sessions'], 'tracker sessions'))
+        _parse(() => Session.fromRow(r), 'tracker session')
+    ];
+    handSessions = [
+      for (final r in _rows(doc['hand_sessions'], 'hand sessions'))
+        _parse(() => HandSession.fromRow(r), 'hand session')
+    ];
+  }
+
+  final known = {for (final s in handSessions) s.id};
+  if (!handSessionIds.every(known.contains)) {
+    throw const FormatException(
+        'Backup contains a hand whose session is missing.');
+  }
   return BackupData(
-    sessions: sessions,
+    trackerSessions: tracker,
+    handSessions: handSessions,
     hands: hands,
     exportedAt: DateTime.tryParse(doc['exported_at'] as String? ?? ''),
   );

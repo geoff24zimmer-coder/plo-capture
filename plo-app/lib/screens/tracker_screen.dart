@@ -1,23 +1,25 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import '../db/hand_store.dart';
-import '../equity/allin_ev.dart';
 import '../export/download_web.dart';
 import '../export/file_pick_web.dart';
-import '../hand_loader.dart';
 import '../models/session.dart';
 import '../tracker/backup.dart';
+import '../tracker/format.dart';
 import '../widgets/ledger_calendar.dart';
 import '../widgets/session_editor.dart';
 import '../widgets/tracker_stats_view.dart';
-import 'hand_list_screen.dart';
 import 'session_list_screen.dart';
 
 /// The session tracker: Calendar (the paper ledger, digital), Stats (win rate),
-/// and Sessions (every session, with its result). Also home to the device
-/// backup — the only copy of a player's history lives in this browser.
+/// and Sessions (every session, with its result). Sessions are started live
+/// here (clock, add-ons, End → cash-out) or logged after the fact. Separate
+/// from hand logging by design: the tracker never reads captured hands.
+/// Also home to the device backup — the only copy of a player's history lives
+/// in this browser.
 class TrackerScreen extends StatefulWidget {
   final int initialTab;
   const TrackerScreen({super.key, this.initialTab = 0});
@@ -27,60 +29,82 @@ class TrackerScreen extends StatefulWidget {
 }
 
 class _TrackerScreenState extends State<TrackerScreen> {
-  List<SessionRow>? _rows;
-  List<CapturedAllIn>? _allIns; // scored in the background after load
+  List<Session>? _sessions;
   Object? _error;
+  Timer? _tick; // keeps the live session clock current
 
   @override
   void initState() {
     super.initState();
     _load();
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _live != null) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final rows = await HandStore.instance.listSessions();
-      if (mounted) setState(() => _rows = rows);
+      final sessions = await HandStore.instance.listTrackerSessions();
+      if (mounted) setState(() => _sessions = sessions);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
-    _scoreAllIns();
   }
 
-  /// All-in EV for every captured hand that went all-in before the river.
-  /// One hand per microtask so a big history never stalls the UI.
-  Future<void> _scoreAllIns() async {
-    final out = <CapturedAllIn>[];
-    for (final j in await HandStore.instance.allHandJsons()) {
-      try {
-        final ev = computeAllInEv(loadHand(j));
-        if (ev.ok || ev.status == AllInStatus.missingCards) {
-          out.add((
-            at: DateTime.parse(j['captured_at'] as String),
-            cash: (j['session'] as Map?)?['game_type'] != 'mtt',
-            ev: ev,
-          ));
-        }
-      } catch (_) {
-        // An unreadable legacy record just doesn't contribute.
-      }
-      await Future<void>.delayed(Duration.zero);
-      if (!mounted) return;
+  /// The session being played right now, if any.
+  Session? get _live {
+    for (final s in _sessions ?? const <Session>[]) {
+      if (s.isActive) return s;
     }
-    setState(() => _allIns = out);
+    return null;
+  }
+
+  Future<void> _save(Session s) async {
+    await HandStore.instance.updateTrackerSession(s);
+    await _load();
   }
 
   Future<void> _open(Session s) async {
-    await Navigator.push(context,
-        MaterialPageRoute(builder: (_) => HandListScreen(session: s)));
+    final next = await editSession(context, initial: s);
+    if (next != null) await _save(next);
+  }
+
+  Future<void> _startSession() async {
+    final s = await editSession(context, startNow: true);
+    if (s == null) return;
+    await HandStore.instance.createTrackerSession(s);
     await _load();
   }
 
   Future<void> _logSession() async {
     final s = await editSession(context);
     if (s == null) return;
-    await HandStore.instance.createSession(s);
+    await HandStore.instance.createTrackerSession(s);
     await _load();
+  }
+
+  Future<void> _addOn(Session s) async {
+    final amt = await rebuyDialog(context);
+    if (amt == null || amt == 0) return;
+    await _save(s.copyWith(buyIn: () => (s.buyIn ?? 0) + amt));
+  }
+
+  Future<void> _end(Session s) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ended = await endSessionDialog(context, s);
+    if (ended == null) return;
+    await _save(ended);
+    final net = ended.net;
+    messenger.showSnackBar(SnackBar(
+        content: Text(net == null
+            ? 'Session ended — tap it any time to add the result.'
+            : 'Session ended · ${usd(net, signed: true)}')));
   }
 
   static String _stamp() {
@@ -99,7 +123,7 @@ class _TrackerScreenState extends State<TrackerScreen> {
             content: Text('Backup downloaded — keep it somewhere safe.')));
       case 'csv':
         downloadText('plo-show-sessions_${_stamp()}.csv',
-            sessionsCsv([for (final r in _rows ?? <SessionRow>[]) r.session]),
+            sessionsCsv(_sessions ?? const []),
             mime: 'text/csv');
       case 'restore':
         await _restore();
@@ -129,10 +153,9 @@ class _TrackerScreenState extends State<TrackerScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Restore backup?'),
         content: Text(
-            'Adds ${data.sessions.length} session'
-            '${data.sessions.length == 1 ? '' : 's'} and ${data.hands.length} '
-            'hand${data.hands.length == 1 ? '' : 's'}. Anything already on this '
-            'device is kept as-is.'),
+            'Adds ${_count(data.trackerSessions.length, 'tracker session')} '
+            'and ${_count(data.hands.length, 'logged hand')}. Anything '
+            'already on this device is kept as-is.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -146,16 +169,20 @@ class _TrackerScreenState extends State<TrackerScreen> {
     if (yes != true) return;
     final r = await HandStore.instance.importBackup(data);
     await _load();
-    final skipped = r.sessionsSkipped + r.handsSkipped;
     messenger.showSnackBar(SnackBar(
-        content: Text('Restored ${r.sessionsAdded} sessions, ${r.handsAdded} '
-            'hands${skipped > 0 ? ' ($skipped already here)' : ''}.')));
+        content: Text('Restored '
+            '${_count(r.trackerAdded, 'tracker session')}, '
+            '${_count(r.handsAdded, 'logged hand')}'
+            '${r.skipped > 0 ? ' (${r.skipped} already here)' : ''}.')));
   }
+
+  static String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
   @override
   Widget build(BuildContext context) {
-    final rows = _rows;
-    final sessions = [for (final r in rows ?? <SessionRow>[]) r.session];
+    final loaded = _sessions;
+    final sessions = loaded ?? const <Session>[];
+    final live = _live;
     return DefaultTabController(
       length: 3,
       initialIndex: widget.initialTab,
@@ -163,6 +190,11 @@ class _TrackerScreenState extends State<TrackerScreen> {
         appBar: AppBar(
           title: const Text('Tracker'),
           actions: [
+            IconButton(
+              tooltip: 'Log a past session',
+              icon: const Icon(Icons.edit_calendar),
+              onPressed: _logSession,
+            ),
             PopupMenuButton<String>(
               tooltip: 'Backup & export',
               onSelected: _menu,
@@ -172,7 +204,8 @@ class _TrackerScreenState extends State<TrackerScreen> {
                     child: ListTile(
                         leading: Icon(Icons.download, size: 20),
                         title: Text('Download backup'),
-                        subtitle: Text('Sessions + hands, to restore later'),
+                        subtitle: Text(
+                            'Tracker + logged hands, to restore later'),
                         contentPadding: EdgeInsets.zero)),
                 PopupMenuItem(
                     value: 'restore',
@@ -195,11 +228,13 @@ class _TrackerScreenState extends State<TrackerScreen> {
             Tab(text: 'Sessions'),
           ]),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _logSession,
-          icon: const Icon(Icons.edit_calendar),
-          label: const Text('Log session'),
-        ),
+        floatingActionButton: live != null || loaded == null
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _startSession,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Start session'),
+              ),
         body: _error != null
             ? Center(
                 child: Padding(
@@ -209,14 +244,97 @@ class _TrackerScreenState extends State<TrackerScreen> {
                       style: const TextStyle(color: Color(0xFFE24B4A))),
                 ),
               )
-            : rows == null
+            : loaded == null
                 ? const Center(child: CircularProgressIndicator())
-                : TabBarView(children: [
-                    LedgerCalendar(sessions: sessions, onOpen: _open),
-                    TrackerStatsView(sessions: sessions, allIns: _allIns),
-                    SessionListView(
-                        rows: rows, onOpen: _open, onChanged: _load),
+                : Column(children: [
+                    if (live != null)
+                      _LiveBar(
+                        session: live,
+                        onAddOn: () => _addOn(live),
+                        onEnd: () => _end(live),
+                        onEdit: () => _open(live),
+                      ),
+                    Expanded(
+                      child: TabBarView(children: [
+                        LedgerCalendar(sessions: sessions, onOpen: _open),
+                        TrackerStatsView(sessions: sessions),
+                        SessionListView(
+                            sessions: sessions,
+                            onOpen: _open,
+                            onChanged: _load),
+                      ]),
+                    ),
                   ]),
+      ),
+    );
+  }
+}
+
+/// The session being played now: clock, money in, Add on, End (→ cash-out).
+class _LiveBar extends StatelessWidget {
+  final Session session;
+  final VoidCallback onAddOn, onEnd, onEdit;
+  const _LiveBar({
+    required this.session,
+    required this.onAddOn,
+    required this.onEnd,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = session;
+    return Material(
+      color: const Color(0xFF16181B),
+      child: InkWell(
+        onTap: onEdit,
+        child: Container(
+          decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFC9A536)))),
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+          child: Row(children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.circle, size: 9, color: Color(0xFFF0C75A)),
+                    const SizedBox(width: 6),
+                    Text('LIVE · ${durationLabel(s.duration())}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: Color(0xFFF0C75A))),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${s.stakesLabel} · '
+                    '${s.buyIn == null ? 'no buy-in yet' : 'in for ${usd(s.buyIn!)}'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.6)),
+                  ),
+                ],
+              ),
+            ),
+            OutlinedButton(
+              onPressed: onAddOn,
+              child: Text(s.buyIn == null ? 'Buy-in' : 'Add on'),
+            ),
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: onEnd,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFE24B4A),
+                backgroundColor: const Color(0x1AE24B4A),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              child: const Text('End'),
+            ),
+          ]),
+        ),
       ),
     );
   }

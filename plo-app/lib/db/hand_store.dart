@@ -2,12 +2,19 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
+import '../models/hand_session.dart';
 import '../models/session.dart';
 import '../tracker/backup.dart';
+import '../tracker/split.dart';
 
 /// Offline-first storage. The full canonical hand JSON is the source of
 /// truth (schema v1.0, solver-ready as-is); a few columns are duplicated
 /// for fast list queries. Cloud sync later just ships these JSON blobs.
+///
+/// Two separate worlds share the file but never each other's rows:
+/// - hand logging — `sessions` (a [HandSession] per sitting) + `hands`;
+/// - the session tracker — `tracker_sessions` ([Session] results).
+/// Logged hands never feed the tracker, and the tracker never reads hands.
 class HandStore {
   HandStore._() : _pathOverride = null;
 
@@ -26,6 +33,19 @@ class HandStore {
             mtt_finish INTEGER,
             mtt_entrants INTEGER''';
 
+  static const _trackerTable = '''
+          CREATE TABLE tracker_sessions (
+            id TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL,
+            game_type TEXT NOT NULL,
+            sb INTEGER NOT NULL,
+            bb INTEGER NOT NULL,
+            venue TEXT NOT NULL,
+            max_seats INTEGER NOT NULL,
+            ended_at INTEGER,
+$_trackerColumns
+          )''';
+
   Future<Database> get db async {
     if (_db != null) return _db!;
     // On web the ffi factory uses the name as an IndexedDB key; getDatabasesPath
@@ -36,7 +56,7 @@ class HandStore {
             : p.join(await getDatabasesPath(), 'plo_capture.db'));
     _db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onUpgrade: (d, oldV, newV) async {
         // v2: tag decision spots (hands saved mid-action) for the hand list.
         if (oldV < 2) {
@@ -53,6 +73,9 @@ class HandStore {
             await d.execute('ALTER TABLE sessions ADD COLUMN ${col.trim()}');
           }
         }
+        // v5: the tracker and hand logging separate. Results move to their own
+        // table; `sessions` keeps only hand sessions (see tracker/split.dart).
+        if (oldV < 5) await _splitTracker(d);
       },
       onCreate: (d, v) async {
         await d.execute('''
@@ -64,10 +87,10 @@ class HandStore {
             bb INTEGER NOT NULL,
             venue TEXT NOT NULL,
             max_seats INTEGER NOT NULL,
-            ended_at INTEGER,
-$_trackerColumns
+            ended_at INTEGER
           )
         ''');
+        await d.execute(_trackerTable);
         await d.execute('''
           CREATE TABLE hands (
             hand_id TEXT PRIMARY KEY,
@@ -87,6 +110,32 @@ $_trackerColumns
     return _db!;
   }
 
+  /// v4 → v5: copy every result into `tracker_sessions`, drop result-only
+  /// rows from `sessions`, and clear the result columns left behind there
+  /// (SQLite can't portably drop columns; nothing reads them any more).
+  static Future<void> _splitTracker(Database d) async {
+    await d.execute(_trackerTable);
+    final rows = await d.query('sessions');
+    final withHands = {
+      for (final r in await d.rawQuery('SELECT DISTINCT session_id FROM hands'))
+        r['session_id'] as String
+    };
+    final split = splitLegacySessions(rows, withHands: withHands);
+    final keep = {for (final s in split.handLogs) s.id};
+    final batch = d.batch();
+    for (final s in split.tracker) {
+      batch.insert('tracker_sessions', s.toRow());
+    }
+    for (final r in rows) {
+      if (!keep.contains(r['id'])) {
+        batch.delete('sessions', where: 'id = ?', whereArgs: [r['id']]);
+      }
+    }
+    batch.rawUpdate("UPDATE sessions SET game = 'plo4', buy_in = NULL, "
+        "cash_out = NULL, notes = '', mtt_finish = NULL, mtt_entrants = NULL");
+    await batch.commit(noResult: true);
+  }
+
   /// Open the database (which lazily loads the sqlite3 wasm + IndexedDB on web)
   /// ahead of time, so the first session-create / hand-save isn't blocked on
   /// that one-time init. Fire-and-forget from main(); errors are swallowed.
@@ -96,37 +145,23 @@ $_trackerColumns
     } catch (_) {}
   }
 
-  // ------------------------------------------------------------ sessions
+  // ------------------------------------------------------- hand sessions
 
-  Future<void> createSession(Session s) async {
+  Future<void> createHandSession(HandSession s) async {
     final d = await db;
-    // Only one session is "current" at a time — starting a new one ends any
-    // still-active sessions (they remain in Past sessions). A session logged
-    // after the fact (already ended) leaves the current one alone.
-    if (s.isActive) {
-      await d.update(
-          'sessions', {'ended_at': DateTime.now().millisecondsSinceEpoch},
-          where: 'ended_at IS NULL');
-    }
+    // Only one hand session is "current" at a time — starting a new one ends
+    // any still-active ones (they stay in Past sessions).
+    await d.update(
+        'sessions', {'ended_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'ended_at IS NULL');
     await d.insert('sessions', s.toRow());
   }
 
-  /// Overwrite a session's fields (result entry, edits, rebuys).
-  Future<void> updateSession(Session s) async => (await db)
-      .update('sessions', s.toRow(), where: 'id = ?', whereArgs: [s.id]);
-
-  Future<Session?> getSession(String id) async {
-    final rows = await (await db)
-        .query('sessions', where: 'id = ?', whereArgs: [id]);
-    return rows.isEmpty ? null : Session.fromRow(rows.first);
-  }
-
-  /// The resumable "current" session — the most recent one that hasn't been
-  /// ended — with its hand count and running hero net (for the resume button).
-  /// Null when there's no active session.
-  Future<({Session session, int handCount, int handsNet})?> currentSession() async {
+  /// The resumable "current" hand session — the most recent one not ended —
+  /// with its hand count. Null when there's none.
+  Future<({HandSession session, int handCount})?> currentHandSession() async {
     final rows = await (await db).rawQuery('''
-      SELECT s.*, COUNT(h.hand_id) AS cnt, COALESCE(SUM(h.hero_net), 0) AS net
+      SELECT s.*, COUNT(h.hand_id) AS cnt
       FROM sessions s
       LEFT JOIN hands h ON h.session_id = s.id
       WHERE s.ended_at IS NULL
@@ -135,31 +170,23 @@ $_trackerColumns
       LIMIT 1
     ''');
     if (rows.isEmpty) return null;
-    final r = rows.first;
     return (
-      session: Session.fromRow(r),
-      handCount: (r['cnt'] as int?) ?? 0,
-      handsNet: (r['net'] as int?) ?? 0,
+      session: HandSession.fromRow(rows.first),
+      handCount: (rows.first['cnt'] as int?) ?? 0,
     );
   }
 
-  /// Mark a session ended so it's no longer the resumable current session,
-  /// optionally recording the cash-out (and final buy-in total) at the same time.
-  Future<void> endSession(String id, {int? cashOut, int? buyIn}) async =>
-      (await db).update(
+  /// End a hand session so it's no longer the resumable current one.
+  Future<void> endHandSession(String id) async => (await db).update(
         'sessions',
-        {
-          'ended_at': DateTime.now().millisecondsSinceEpoch,
-          if (cashOut != null) 'cash_out': cashOut,
-          if (buyIn != null) 'buy_in': buyIn,
-        },
+        {'ended_at': DateTime.now().millisecondsSinceEpoch},
         where: 'id = ?',
         whereArgs: [id],
       );
 
-  /// Delete a session and all of its hands. SQLite foreign keys aren't
+  /// Delete a hand session and all of its hands. SQLite foreign keys aren't
   /// enforced here, so cascade explicitly; one transaction keeps it atomic.
-  Future<void> deleteSession(String id) async {
+  Future<void> deleteHandSession(String id) async {
     final d = await db;
     await d.transaction((txn) async {
       await txn.delete('hands', where: 'session_id = ?', whereArgs: [id]);
@@ -167,11 +194,11 @@ $_trackerColumns
     });
   }
 
-  /// Sessions newest-first, each with hand count and running hero net.
-  Future<List<({Session session, int handCount, int handsNet})>>
-      listSessions() async {
+  /// Hand sessions newest-first, each with its hand count.
+  Future<List<({HandSession session, int handCount})>>
+      listHandSessions() async {
     final rows = await (await db).rawQuery('''
-      SELECT s.*, COUNT(h.hand_id) AS cnt, COALESCE(SUM(h.hero_net), 0) AS net
+      SELECT s.*, COUNT(h.hand_id) AS cnt
       FROM sessions s
       LEFT JOIN hands h ON h.session_id = s.id
       GROUP BY s.id
@@ -179,13 +206,38 @@ $_trackerColumns
     ''');
     return [
       for (final r in rows)
-        (
-          session: Session.fromRow(r),
-          handCount: (r['cnt'] as int?) ?? 0,
-          handsNet: (r['net'] as int?) ?? 0,
-        )
+        (session: HandSession.fromRow(r), handCount: (r['cnt'] as int?) ?? 0)
     ];
   }
+
+  // ---------------------------------------------------- tracker sessions
+
+  Future<void> createTrackerSession(Session s) async {
+    final d = await db;
+    // One live tracker session at a time — starting one ends any still-live
+    // ones (unresolved). One logged after the fact leaves the live one alone.
+    if (s.isActive) {
+      await d.update('tracker_sessions',
+          {'ended_at': DateTime.now().millisecondsSinceEpoch},
+          where: 'ended_at IS NULL');
+    }
+    await d.insert('tracker_sessions', s.toRow());
+  }
+
+  /// Overwrite a tracker session (result entry, edits, add-ons, ending).
+  Future<void> updateTrackerSession(Session s) async => (await db).update(
+      'tracker_sessions', s.toRow(),
+      where: 'id = ?', whereArgs: [s.id]);
+
+  Future<void> deleteTrackerSession(String id) async => (await db)
+      .delete('tracker_sessions', where: 'id = ?', whereArgs: [id]);
+
+  /// Every tracker session, newest first.
+  Future<List<Session>> listTrackerSessions() async => [
+        for (final r in await (await db)
+            .query('tracker_sessions', orderBy: 'created_at DESC'))
+          Session.fromRow(r)
+      ];
 
   // --------------------------------------------------------------- hands
 
@@ -238,16 +290,6 @@ $_trackerColumns
     ];
   }
 
-  /// Every hand's canonical JSON, oldest first (tracker-wide analysis).
-  Future<List<Map<String, dynamic>>> allHandJsons() async {
-    final rows = await (await db)
-        .query('hands', columns: ['json'], orderBy: 'captured_at');
-    return [
-      for (final r in rows)
-        jsonDecode(r['json'] as String) as Map<String, dynamic>
-    ];
-  }
-
   Future<Map<String, dynamic>> getHand(String handId) async {
     final rows = await (await db)
         .query('hands', columns: ['json'], where: 'hand_id = ?', whereArgs: [handId]);
@@ -262,11 +304,13 @@ $_trackerColumns
   /// Everything on this device as a backup document (see `tracker/backup.dart`).
   Future<Map<String, dynamic>> exportAll() async {
     final d = await db;
+    final tracker = await d.query('tracker_sessions', orderBy: 'created_at');
     final sessions = await d.query('sessions', orderBy: 'created_at');
     final hands =
         await d.query('hands', columns: ['json'], orderBy: 'captured_at');
     return buildBackup(
-      sessions: [for (final r in sessions) Session.fromRow(r)],
+      trackerSessions: [for (final r in tracker) Session.fromRow(r)],
+      handSessions: [for (final r in sessions) HandSession.fromRow(r)],
       hands: [
         for (final r in hands)
           jsonDecode(r['json'] as String) as Map<String, dynamic>
@@ -279,9 +323,14 @@ $_trackerColumns
   /// bad record leaves the store untouched.
   Future<ImportSummary> importBackup(BackupData b) async {
     final d = await db;
-    var sAdded = 0, hAdded = 0;
+    var tAdded = 0, sAdded = 0, hAdded = 0;
     await d.transaction((txn) async {
-      for (final s in b.sessions) {
+      for (final s in b.trackerSessions) {
+        final n = await txn.insert('tracker_sessions', s.toRow(),
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+        if (n != 0) tAdded++;
+      }
+      for (final s in b.handSessions) {
         final n = await txn.insert('sessions', s.toRow(),
             conflictAlgorithm: ConflictAlgorithm.ignore);
         if (n != 0) sAdded++;
@@ -293,8 +342,10 @@ $_trackerColumns
       }
     });
     return ImportSummary(
-      sessionsAdded: sAdded,
-      sessionsSkipped: b.sessions.length - sAdded,
+      trackerAdded: tAdded,
+      trackerSkipped: b.trackerSessions.length - tAdded,
+      handSessionsAdded: sAdded,
+      handSessionsSkipped: b.handSessions.length - sAdded,
       handsAdded: hAdded,
       handsSkipped: b.hands.length - hAdded,
     );

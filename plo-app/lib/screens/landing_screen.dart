@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
-import '../models/session.dart';
+import '../models/hand_session.dart';
 import '../tracker/format.dart';
 import '../widgets/home_actions.dart';
 import 'capture_screen.dart';
 import 'equity_screen.dart';
 import 'hand_list_screen.dart';
+import 'hand_sessions_screen.dart';
 import 'tracker_screen.dart';
 
-/// App home. Resume the current (unfinished) session in one tap, or start a new
-/// one; the tracker (calendar, win rate, every past session) is one tap away.
+/// App home: three separate features. Log played hands (resume the current
+/// hand session in one tap, or start one), the session tracker (results), and
+/// the equity calculator.
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
   @override
@@ -17,7 +19,7 @@ class LandingScreen extends StatefulWidget {
 }
 
 class _LandingScreenState extends State<LandingScreen> {
-  ({Session session, int handCount, int handsNet})? _current;
+  ({HandSession session, int handCount})? _current;
 
   @override
   void initState() {
@@ -26,7 +28,7 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 
   void _load() {
-    HandStore.instance.currentSession().then((c) {
+    HandStore.instance.currentHandSession().then((c) {
       if (mounted) setState(() => _current = c);
     });
   }
@@ -68,7 +70,7 @@ class _LandingScreenState extends State<LandingScreen> {
               const SizedBox(height: 12),
               HomeAction(
                 title: 'Session tracker',
-                subtitle: 'Calendar, win rate & every session',
+                subtitle: 'Results, calendar & win rate',
                 icon: Icons.calendar_month_outlined,
                 accent: homeGold,
                 onTap: () => _push(const TrackerScreen()),
@@ -88,10 +90,12 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  /// "Log played hands" → cash or tournament → the session setup sheet.
+  /// "Log played hands" → cash or tournament → the session setup sheet (or
+  /// the past hand sessions).
   Future<void> _logHands() async {
     final type = await pickGameType(context);
     if (type == null || !mounted) return;
+    if (type == 'past') return _push(const HandSessionsScreen());
     await _start(context, type);
   }
 
@@ -100,7 +104,7 @@ class _LandingScreenState extends State<LandingScreen> {
     _load();
   }
 
-  Future<void> _resume(Session s) async {
+  Future<void> _resume(HandSession s) async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => HandListScreen(session: s)),
@@ -111,30 +115,26 @@ class _LandingScreenState extends State<LandingScreen> {
   Future<void> _start(BuildContext context, String gameType) async {
     final session = await _sessionSheet(context, gameType);
     if (session == null) return;
-    await HandStore.instance.createSession(session);
+    await HandStore.instance.createHandSession(session);
     if (!context.mounted) return;
-    // PLO4 goes straight to capturing a hand (the 15-second path); other games
-    // track results only, so they land on the session screen.
+    // Straight to capturing a hand — the 15-second path.
     await Navigator.push(
       context,
-      MaterialPageRoute(
-          builder: (_) => session.canCaptureHands
-              ? CaptureScreen(session: session)
-              : HandListScreen(session: session)),
+      MaterialPageRoute(builder: (_) => CaptureScreen(session: session)),
     );
     _load();
   }
 
-  /// Quick session setup: venue (+ cash stakes) + table size. Returns a built
-  /// Session, or null if cancelled.
-  Future<Session?> _sessionSheet(BuildContext context, String gameType) async {
+  /// Quick hand-session setup: venue (+ cash stakes) + table size. No money —
+  /// results belong to the session tracker. Returns the session, or null if
+  /// cancelled.
+  Future<HandSession?> _sessionSheet(
+      BuildContext context, String gameType) async {
     final isMtt = gameType == 'mtt';
     final venueCtrl = TextEditingController();
     final sbCtrl = TextEditingController(text: '2');
     final bbCtrl = TextEditingController(text: '5');
-    final buyInCtrl = TextEditingController();
     var seats = 8;
-    var game = 'plo4';
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -150,15 +150,6 @@ class _LandingScreenState extends State<LandingScreen> {
               Text(isMtt ? 'New tournament' : 'New cash game',
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 14),
-              SegmentedButton<String>(
-                segments: [
-                  for (final e in Session.gameLabels.entries)
-                    ButtonSegment(value: e.key, label: Text(e.value)),
-                ],
-                selected: {game},
-                onSelectionChanged: (v) => setSheet(() => game = v.first),
-              ),
               const SizedBox(height: 4),
               TextField(
                 controller: venueCtrl,
@@ -184,17 +175,6 @@ class _LandingScreenState extends State<LandingScreen> {
                               const InputDecoration(labelText: 'BB \$'))),
                 ]),
               ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: buyInCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                    labelText: isMtt
-                        ? 'Buy-in incl. fee (optional)'
-                        : 'Buy-in (optional)',
-                    prefixText: '\$ '),
-              ),
               const SizedBox(height: 12),
               Row(children: [
                 const Text('Table size'),
@@ -222,7 +202,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
 
     if (ok != true) return null;
-    return Session(
+    return HandSession(
       id: 'session-${DateTime.now().microsecondsSinceEpoch}',
       createdAt: DateTime.now(),
       gameType: gameType,
@@ -233,16 +213,14 @@ class _LandingScreenState extends State<LandingScreen> {
           ? (isMtt ? 'Tournament' : 'Cash game')
           : venueCtrl.text.trim(),
       maxSeats: seats,
-      game: game,
-      buyIn: parseDollars(buyInCtrl.text),
     );
   }
 }
 
 /// Prominent "pick up where you left off" card for the active session.
 class _ResumeCard extends StatelessWidget {
-  final ({Session session, int handCount, int handsNet}) current;
-  final Future<void> Function(Session) onTap;
+  final ({HandSession session, int handCount}) current;
+  final Future<void> Function(HandSession) onTap;
   const _ResumeCard({required this.current, required this.onTap});
 
   @override
@@ -289,7 +267,6 @@ class _ResumeCard extends StatelessWidget {
                       Text(
                         [
                           durationLabel(s.duration()),
-                          if (s.buyIn != null) 'in for ${usd(s.buyIn!)}',
                           if (hands > 0) '$hands hand${hands == 1 ? '' : 's'}',
                         ].join(' · '),
                         style: TextStyle(

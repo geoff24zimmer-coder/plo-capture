@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../plo_engine.dart';
 import '../hand_recorder.dart';
 import '../util.dart';
-import '../models/session.dart';
+import '../models/hand_session.dart';
 import '../db/hand_store.dart';
 import '../onboarding.dart';
 import '../widgets/seat_ring.dart';
@@ -16,7 +16,7 @@ enum _Phase { setup, acting, result }
 enum _StraddleChoice { none, utg, button }
 
 class CaptureScreen extends StatefulWidget {
-  final Session session;
+  final HandSession session;
   const CaptureScreen({super.key, required this.session});
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();

@@ -151,25 +151,3 @@ AllInEv computeAllInEv(LoadedHand h, {int samples = allInSamples}) {
     exact: exact,
   );
 }
-
-/// One captured hand's all-in, tagged for tracker filtering.
-typedef CapturedAllIn = ({DateTime at, bool cash, AllInEv ev});
-
-/// Totals across many hands: how hero's all-ins ran versus their EV.
-class AllInSummary {
-  int hands = 0; // all-ins with an EV and a recorded result
-  int expected = 0;
-  int actual = 0;
-  int missingCards = 0; // all-ins we couldn't score (villain cards unknown)
-  int get luck => actual - expected;
-
-  AllInSummary.of(Iterable<AllInEv> evs) {
-    for (final ev in evs) {
-      if (ev.status == AllInStatus.missingCards) missingCards++;
-      if (!ev.ok || ev.heroActual == null) continue;
-      hands++;
-      expected += ev.heroEv!;
-      actual += ev.heroActual!;
-    }
-  }
-}

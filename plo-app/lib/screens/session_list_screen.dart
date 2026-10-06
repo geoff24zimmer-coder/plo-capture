@@ -3,30 +3,27 @@ import '../db/hand_store.dart';
 import '../models/session.dart';
 import '../tracker/format.dart';
 
-typedef SessionRow = ({Session session, int handCount, int handsNet});
-
-/// The tracker's Sessions tab: every session newest-first with its result.
-/// The right-hand number is the session result (cash-out − buy-in), never the
-/// sum of captured hands; sessions without a result say so.
+/// The tracker's Sessions tab: every session newest-first with its result
+/// (cash-out − buy-in); sessions without a result say so.
 class SessionListView extends StatelessWidget {
-  final List<SessionRow> rows;
+  final List<Session> sessions;
   final Future<void> Function(Session) onOpen;
   final VoidCallback onChanged;
   const SessionListView(
       {super.key,
-      required this.rows,
+      required this.sessions,
       required this.onOpen,
       required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) {
+    if (sessions.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Text(
-              'No sessions yet.\nStart one from the home screen, or tap '
-              '“Log session” to add one you’ve already played.',
+              'No sessions yet.\nTap “Start session” when you sit down, or '
+              'the calendar icon to log one you’ve already played.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
         ),
@@ -34,21 +31,17 @@ class SessionListView extends StatelessWidget {
     }
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 96),
-      itemCount: rows.length,
+      itemCount: sessions.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (ctx, i) {
-        final r = rows[i];
-        final s = r.session;
+        final s = sessions[i];
         final net = s.net;
-        final hands = r.handCount == 0
-            ? ''
-            : ' · ${r.handCount} hand${r.handCount == 1 ? '' : 's'}';
         return ListTile(
           title: Text('${s.stakesLabel} · ${s.venue}',
               maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
               '${shortDate(s.createdAt)}, ${s.createdAt.year} · '
-              '${durationLabel(s.duration())}$hands'),
+              '${durationLabel(s.duration())}'),
           trailing: s.isActive
               ? const _Tag('LIVE', Color(0xFFF0C75A))
               : net == null
@@ -64,23 +57,19 @@ class SessionListView extends StatelessWidget {
                       ),
                     ),
           onTap: () => onOpen(s),
-          onLongPress: () => _confirmDelete(context, s, r.handCount),
+          onLongPress: () => _confirmDelete(context, s),
         );
       },
     );
   }
 
-  Future<void> _confirmDelete(
-      BuildContext context, Session s, int handCount) async {
+  Future<void> _confirmDelete(BuildContext context, Session s) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete session?'),
-        content: Text(handCount == 0
-            ? 'Delete “${s.stakesLabel} · ${s.venue}”?'
-            : 'Delete “${s.stakesLabel} · ${s.venue}” and its '
-                '$handCount hand${handCount == 1 ? '' : 's'}? '
-                'This can’t be undone.'),
+        content: Text('Delete “${s.stakesLabel} · ${s.venue}”? '
+            'This can’t be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -95,7 +84,7 @@ class SessionListView extends StatelessWidget {
       ),
     );
     if (yes == true) {
-      await HandStore.instance.deleteSession(s.id);
+      await HandStore.instance.deleteTrackerSession(s.id);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

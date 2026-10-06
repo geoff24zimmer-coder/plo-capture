@@ -1,16 +1,19 @@
 // Minimal CDP driver for the Flutter web PWA (headless Chrome, 500x717 @1x).
 import { spawn } from 'node:child_process';
-import { writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdtempSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function launch({ url }) {
+export async function launch({ url, profile }) {
   // Port 0: Chrome picks a free port and writes it to DevToolsActivePort in
   // OUR profile dir — so we can only ever attach to the browser we spawned
   // (never another session's Chrome on a fixed port).
-  const dir = mkdtempSync(join(tmpdir(), 'cdp-'));
+  // `profile`: reuse a browser profile (keeps IndexedDB across runs, e.g. to
+  // test a database upgrade from an older build). Default: a fresh one.
+  const dir = profile ?? mkdtempSync(join(tmpdir(), 'cdp-'));
+  try { unlinkSync(join(dir, 'DevToolsActivePort')); } catch {}
   const chrome = spawn('google-chrome-stable', [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${dir}`,
     '--window-size=500,717', '--autoplay-policy=no-user-gesture-required',
@@ -97,6 +100,11 @@ export async function launch({ url }) {
     throw new Error('not found: ' + text);
   };
   const close = () => { try { ws.close(); } catch {} chrome.kill('SIGKILL'); };
+  // Let Chrome flush storage (IndexedDB) before exiting — for profile reuse.
+  const quit = async () => {
+    try { await Promise.race([send('Browser.close'), sleep(3000)]); } catch {}
+    await sleep(1500); close();
+  };
   const on = (method, cb) => { handlers[method] = cb; };
-  return { on, send, evaluate, click, longPress, clearField, shot, enableSemantics, find, tap, sleep, logs, close };
+  return { on, send, evaluate, click, longPress, clearField, shot, enableSemantics, find, tap, sleep, logs, close, quit };
 }

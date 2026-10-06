@@ -5,19 +5,19 @@ import '../tracker/format.dart';
 
 const _gold = Color(0xFFF0C75A);
 
-/// Full session form: log a past session ([initial] null) or edit one. Returns
-/// the edited [Session], or null if cancelled. [lockType] freezes cash/MTT and
-/// the game once hands are captured (their amounts depend on both).
+/// Full tracker session form: log a past session ([initial] null), start a
+/// live one now ([startNow]), or edit one. Returns the [Session], or null if
+/// cancelled.
 Future<Session?> editSession(
   BuildContext context, {
   Session? initial,
-  bool lockType = false,
+  bool startNow = false,
 }) =>
     Navigator.push<Session>(
       context,
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _SessionEditor(initial: initial, lockType: lockType),
+        builder: (_) => _SessionEditor(initial: initial, startNow: startNow),
       ),
     );
 
@@ -168,8 +168,8 @@ class _MoneyField extends StatelessWidget {
 
 class _SessionEditor extends StatefulWidget {
   final Session? initial;
-  final bool lockType;
-  const _SessionEditor({this.initial, required this.lockType});
+  final bool startNow;
+  const _SessionEditor({this.initial, required this.startNow});
 
   @override
   State<_SessionEditor> createState() => _SessionEditorState();
@@ -201,8 +201,10 @@ class _SessionEditorState extends State<_SessionEditor> {
         now.year, now.month, now.day, now.hour, now.minute - now.minute % 15);
     _type = s?.gameType ?? 'cash';
     _game = s?.game ?? 'plo4';
-    _start = s?.createdAt ?? end.subtract(const Duration(hours: 4));
-    _end = s == null ? end : s.endedAt;
+    final live = s == null && widget.startNow;
+    _start = s?.createdAt ??
+        (live ? now : end.subtract(const Duration(hours: 4)));
+    _end = s == null ? (live ? null : end) : s.endedAt;
     _venue = TextEditingController(text: s?.venue ?? '');
     _sb = TextEditingController(
         text: s == null ? '2' : dollarsField(s.smallBlind));
@@ -305,37 +307,41 @@ class _SessionEditorState extends State<_SessionEditor> {
     final net = buyIn != null && cashOut != null ? cashOut - buyIn : null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'Log a session' : 'Edit session'),
+        title: Text(!_isNew
+            ? 'Edit session'
+            : live
+                ? 'Start session'
+                : 'Log a session'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            child: FilledButton(
+                onPressed: _save,
+                child: Text(_isNew && live ? 'Start' : 'Save')),
           ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
         children: [
-          if (!widget.lockType) ...[
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'cash', label: Text('Cash')),
-                ButtonSegment(value: 'mtt', label: Text('Tournament')),
-              ],
-              selected: {_type},
-              onSelectionChanged: (v) => setState(() => _type = v.first),
-            ),
-            const SizedBox(height: 12),
-            SegmentedButton<String>(
-              segments: [
-                for (final e in Session.gameLabels.entries)
-                  ButtonSegment(value: e.key, label: Text(e.value)),
-              ],
-              selected: {_game},
-              onSelectionChanged: (v) => setState(() => _game = v.first),
-            ),
-            const SizedBox(height: 8),
-          ],
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'cash', label: Text('Cash')),
+              ButtonSegment(value: 'mtt', label: Text('Tournament')),
+            ],
+            selected: {_type},
+            onSelectionChanged: (v) => setState(() => _type = v.first),
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: [
+              for (final e in Session.gameLabels.entries)
+                ButtonSegment(value: e.key, label: Text(e.value)),
+            ],
+            selected: {_game},
+            onSelectionChanged: (v) => setState(() => _game = v.first),
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: _venue,
             textCapitalization: TextCapitalization.words,

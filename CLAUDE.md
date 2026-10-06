@@ -28,7 +28,14 @@ to measure this.
 - `lib/db/hand_store.dart` — sqflite. The full canonical JSON blob is the
   source of truth; a few columns (hero_net, pot, marked, timestamps) are
   duplicated for list queries. Never make the columns authoritative.
-- `lib/screens/` — session_list → hand_list → capture / replayer.
+- **Hand logging and the session tracker are separate and never intermingle**
+  (owner, 2026-10-06). Hand logging = `HandSession` (`models/hand_session.dart`,
+  table `sessions`, no money) + `hands`; the tracker = `Session`
+  (`models/session.dart`, table `tracker_sessions`, buy-in/cash-out). Logged
+  hands never feed the tracker; the tracker never reads hands. Pre-split data
+  (DB v4, backup v1) is split by `tracker/split.dart`.
+- `lib/screens/` — landing → capture (15-second path) / hand_sessions (Past
+  sessions) → hand_list → capture / replayer; tracker_screen.
 - `lib/widgets/seat_ring.dart` — the signature UI: table-mirroring ring, hero
   anchored bottom, amber pointer on the actor. Reused by capture AND replayer.
 - `lib/tracker/` — session tracker (pure Dart): `stats.dart` (cash $/hr, bb/hr,
@@ -36,12 +43,13 @@ to measure this.
   (whole-device JSON backup/restore + CSV). Win rate comes ONLY from session
   buy-in/cash-out (`Session.buyIn/cashOut`, cents even for MTT) — never from
   summing captured hands (biased sample). Unresolved sessions are excluded,
-  not filled in. UI: `screens/tracker_screen.dart` (Calendar/Stats/Sessions).
+  not filled in. UI: `screens/tracker_screen.dart` (Calendar/Stats/Sessions;
+  live session bar — start, add-on, End → cash-out — or log one after).
 - `lib/equity/` — Omaha equity (pure Dart): `evaluator.dart` (13^5 rank
   table, exactly-2-from-hand), `equity.dart` (exact enumeration or Monte
-  Carlo, sliced for the UI), `allin_ev.dart` (all-in EV of captured hands,
+  Carlo, sliced for the UI), `allin_ev.dart` (all-in EV of a captured hand,
   pot by pot via `computePots()`; missing villain cards → no EV, never
-  guessed). Verified against textbook 5-card counts and published exact
+  guessed; per hand only — never totalled into the tracker). Verified against textbook 5-card counts and published exact
   equities (`test/equity_test.dart`). UI: `screens/equity_screen.dart`.
 - Canonical JSON Schema (v1.0, plo4-only, game_type cash|mtt) lives outside
   the app repo: `plo-hand-history.schema.json`. There is also a Python mirror
@@ -73,8 +81,8 @@ to measure this.
 9. 4-card PLO only for capture, the engine, and the hand schema (no plo5/plo6,
    no SNG). Don't re-add variant plumbing there. Deliberate exceptions: the
    standalone equity calculator handles PLO4 and PLO5, and a tracker session
-   can be tagged `game: plo5|other` to record results (such sessions can't
-   capture hands).
+   can be tagged `game: plo5|other` (the tracker records results only; hand
+   logging is separate and always PLO4).
 
 ## Verification habits used so far
 

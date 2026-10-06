@@ -189,7 +189,7 @@ void main() {
     expect(computeAllInEv(h).status, AllInStatus.notAllIn);
   });
 
-  test('summary adds scored all-ins and counts unscorable ones', () {
+  test('same all-in, different run-outs: same EV, different result', () {
     LoadedHand jam(Map<int, List<String>> shown, List<String> board,
             int winner) =>
         play(cfg4({1: 10000, 2: 10000, 3: 10000, 4: 10000}), turnJam(),
@@ -205,11 +205,10 @@ void main() {
         {3: ['7s', '7d', '9c', '8c']}, ['Ah', 'Kh', '7h', '2c', '9d'], 1));
     final mucked =
         computeAllInEv(jam(const {}, ['Ah', 'Kh', '7h', '2c', '9d'], 1));
-    final sum = AllInSummary.of([lost, won, mucked]);
-    expect(sum.hands, 2);
-    expect(sum.expected, 2 * 5150);
-    expect(sum.actual, -10000 + 10200);
-    expect(sum.luck, 200 - 10300);
-    expect(sum.missingCards, 1);
+    expect(lost.heroEv, 5150);
+    expect(won.heroEv, 5150);
+    expect(lost.heroActual, -10000);
+    expect(won.heroActual, 10200);
+    expect(mucked.status, AllInStatus.missingCards);
   });
 }

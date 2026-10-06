@@ -5,22 +5,23 @@ import '../db/hand_store.dart';
 import '../export/download_web.dart';
 import '../export/review_export.dart';
 import '../export/solver_export.dart';
-import '../models/session.dart';
+import '../models/hand_session.dart';
 import '../tracker/format.dart';
 import '../util.dart';
-import '../widgets/session_editor.dart';
 import 'capture_screen.dart';
 import 'replayer_screen.dart';
 
+/// One hand session's logged hands: replay, export for the solver, delete.
+/// No money — session results live in the tracker.
 class HandListScreen extends StatefulWidget {
-  final Session session;
+  final HandSession session;
   const HandListScreen({super.key, required this.session});
   @override
   State<HandListScreen> createState() => _HandListScreenState();
 }
 
 class _HandListScreenState extends State<HandListScreen> {
-  late Session _s = widget.session;
+  late HandSession _s = widget.session;
   late Future<List<Map<String, dynamic>>> _future;
   Timer? _tick; // keeps the live session clock current
 
@@ -42,26 +43,6 @@ class _HandListScreenState extends State<HandListScreen> {
 
   void _refresh() =>
       setState(() => _future = HandStore.instance.handsForSession(_s.id));
-
-  Future<void> _save(Session next) async {
-    await HandStore.instance.updateSession(next);
-    if (mounted) setState(() => _s = next);
-  }
-
-  Future<void> _edit() async {
-    // Captured hands pin the session's type and game (chips vs cents, plo4).
-    final hasHands =
-        (await HandStore.instance.handsForSession(_s.id)).isNotEmpty;
-    if (!mounted) return;
-    final next = await editSession(context, initial: _s, lockType: hasHands);
-    if (next != null) await _save(next);
-  }
-
-  Future<void> _addOn() async {
-    final amt = await rebuyDialog(context);
-    if (amt == null || amt == 0) return;
-    await _save(_s.copyWith(buyIn: () => (_s.buyIn ?? 0) + amt));
-  }
 
   static String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -108,16 +89,27 @@ class _HandListScreenState extends State<HandListScreen> {
   }
 
   Future<void> _confirmEndSession() async {
-    final ended = await endSessionDialog(context, _s);
-    if (ended == null) return;
-    await HandStore.instance.updateSession(ended);
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('End session?'),
+        content: const Text('Its hands stay in Past sessions.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('End session')),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    final now = DateTime.now();
+    await HandStore.instance.endHandSession(_s.id);
     if (!mounted) return;
-    final net = ended.net;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(net == null
-            ? 'Session ended — add the result any time from the Tracker.'
-            : 'Session ended · ${usd(net, signed: true)}')));
-    Navigator.pop(context); // back to landing / the tracker
+    setState(() => _s = _s.ended(now));
+    Navigator.pop(context); // back home
   }
 
   Future<void> _confirmDeleteRow(String handId) async {
@@ -205,16 +197,10 @@ class _HandListScreenState extends State<HandListScreen> {
         title: Text('${s.stakesLabel} · ${s.venue}'),
         actions: [
           IconButton(
-            tooltip: 'Edit session',
-            icon: const Icon(Icons.edit_note),
-            onPressed: _edit,
+            tooltip: 'Export for solver',
+            icon: const Icon(Icons.ios_share),
+            onPressed: _exportForSolver,
           ),
-          if (s.canCaptureHands)
-            IconButton(
-              tooltip: 'Export for solver',
-              icon: const Icon(Icons.ios_share),
-              onPressed: _exportForSolver,
-            ),
           if (s.isActive)
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -232,23 +218,21 @@ class _HandListScreenState extends State<HandListScreen> {
             ),
         ],
       ),
-      floatingActionButton: !s.canCaptureHands
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => CaptureScreen(session: s)),
-                );
-                _refresh();
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Log hand'),
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => CaptureScreen(session: s)),
+          );
+          _refresh();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Log hand'),
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SessionHeader(session: s, onAddOn: _addOn, onEdit: _edit),
+          _SessionHeader(session: s),
           const Divider(height: 1),
           Expanded(child: _handList()),
         ],
@@ -268,11 +252,7 @@ class _HandListScreenState extends State<HandListScreen> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: Text(
-                    _s.canCaptureHands
-                        ? 'No hands logged yet.'
-                        : 'Hand capture is 4-card PLO only — this session '
-                            'tracks your result.',
+                child: Text('No hands logged yet.',
                     textAlign: TextAlign.center,
                     style:
                         TextStyle(color: Colors.white.withValues(alpha: 0.5))),
@@ -367,74 +347,30 @@ class _HandListScreenState extends State<HandListScreen> {
   }
 }
 
-/// Session status strip: the live clock and money in (with add-on), or — once
-/// ended — the times and the result (or a prompt to add one).
+/// Session status strip: the live clock, or — once ended — when it ran.
 class _SessionHeader extends StatelessWidget {
-  final Session session;
-  final VoidCallback onAddOn, onEdit;
-  const _SessionHeader(
-      {required this.session, required this.onAddOn, required this.onEdit});
+  final HandSession session;
+  const _SessionHeader({required this.session});
 
   @override
   Widget build(BuildContext context) {
     final s = session;
-    final muted = TextStyle(
-        fontSize: 13, color: Colors.white.withValues(alpha: 0.6));
-    final Widget left;
-    final Widget right;
-    if (s.isActive) {
-      left = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(Icons.circle, size: 9, color: Color(0xFFF0C75A)),
-            const SizedBox(width: 6),
-            Text('LIVE · ${durationLabel(s.duration())}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                    color: Color(0xFFF0C75A))),
-          ]),
-          const SizedBox(height: 2),
-          Text(s.buyIn == null ? 'No buy-in entered' : 'In for ${usd(s.buyIn!)}',
-              style: muted),
-        ],
-      );
-      right = OutlinedButton.icon(
-        onPressed: onAddOn,
-        icon: const Icon(Icons.add, size: 18),
-        label: Text(s.buyIn == null ? 'Buy-in' : 'Add on'),
-      );
-    } else {
-      left = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: s.isActive
+          ? Row(children: [
+              const Icon(Icons.circle, size: 9, color: Color(0xFFF0C75A)),
+              const SizedBox(width: 6),
+              Text('LIVE · ${durationLabel(s.duration())}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: Color(0xFFF0C75A))),
+            ])
+          : Text(
               '${shortDate(s.createdAt)} · ${clock(s.createdAt)}–'
               '${clock(s.endedAt!)} · ${durationLabel(s.duration())}',
               style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(
-              s.hasResult
-                  ? 'In ${usd(s.buyIn!)} · Out ${usd(s.cashOut!)}'
-                  : 'No result yet',
-              style: muted),
-        ],
-      );
-      right = s.hasResult
-          ? Text(usd(s.net!, signed: true),
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: s.net! >= 0
-                      ? const Color(0xFF5DCAA5)
-                      : const Color(0xFFE24B4A)))
-          : FilledButton.tonal(
-              onPressed: onEdit, child: const Text('Add result'));
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Row(children: [Expanded(child: left), right]),
     );
   }
 }

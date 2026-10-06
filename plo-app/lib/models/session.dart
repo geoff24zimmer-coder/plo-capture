@@ -1,14 +1,13 @@
-/// A live session: one sitting at one game. Hands belong to sessions, and the
-/// session also carries the tracker result (buy-in / cash-out) that win rate is
-/// computed from.
+/// A session-tracker session: one sitting at one game and its result (buy-in /
+/// cash-out), which win rate is computed from. Separate from hand logging
+/// (`HandSession`) by design — the two never share records, and logged hands
+/// never feed the tracker (they're a biased sample: players log the
+/// interesting hands).
 ///
-/// Win rate comes from [buyIn]/[cashOut] ONLY — never from summing captured
-/// hands, which is a biased sample (players log the interesting hands). A
-/// session without both is "unresolved" and stays out of the stats rather than
-/// having a result invented for it.
+/// A session without both [buyIn] and [cashOut] is "unresolved" and stays out
+/// of the stats rather than having a result invented for it.
 ///
-/// Tracker money ([buyIn], [cashOut]) is ALWAYS real currency in cents, even for
-/// MTTs — whose captured hands are denominated in tournament chips.
+/// Money ([buyIn], [cashOut]) is ALWAYS real currency in cents, even for MTTs.
 class Session {
   final String id;
 
@@ -19,10 +18,9 @@ class Session {
   final int bigBlind; // cents
   final String venue;
   final int maxSeats;
-  final DateTime? endedAt; // null = active; this is the resumable "current" session
+  final DateTime? endedAt; // null = live (being played now)
 
-  /// Game played, for the tracker: `plo4` | `plo5` | `other`. Hand capture is
-  /// 4-card only — a plo5/other session records results, not hands.
+  /// Game played: `plo4` | `plo5` | `other`.
   final String game;
 
   /// Total money in, cents: buy-in plus every rebuy/add-on (MTT: buy-in + fee,
@@ -55,9 +53,6 @@ class Session {
 
   bool get isMtt => gameType == 'mtt';
   bool get isActive => endedAt == null;
-
-  /// Hands can only be captured for 4-card PLO (the engine/schema are plo4-only).
-  bool get canCaptureHands => game == 'plo4';
 
   /// Ended, with both buy-in and cash-out entered — counts toward win rate.
   bool get hasResult => !isActive && buyIn != null && cashOut != null;
