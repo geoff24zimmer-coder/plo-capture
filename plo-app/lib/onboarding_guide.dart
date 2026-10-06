@@ -40,7 +40,9 @@ final List<_Step> _steps = [
     _b('No straddle / UTG / Button'),
     _t(' — then tap '),
     _b('Start hand'),
-    _t('.'),
+    _t('. Someone deeper or shorter? '),
+    _b('Long-press their seat'),
+    _t(' on the table to set their stack, any time during the hand.'),
   ]),
   _Step(Icons.touch_app, _goldLight, '2 · Replay the action in order', [
     _t('An '),

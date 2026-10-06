@@ -57,6 +57,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
   int? _heroSeat; // claimed mid-action when the user reaches their own seat
   _StraddleChoice _straddle = _StraddleChoice.none;
   bool _markedForReview = false;
+  // Per-seat starting stacks set by long-pressing a seat this hand; every
+  // other seat starts with the setup form's table stack.
+  Map<int, int> _stackOverrides = {};
 
   // ---- live hand state
   _Phase _phase = _Phase.setup;
@@ -106,7 +109,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   /// Build the hand config from the current form + chosen button. Used both to
   /// render the live seat-select preview and to start the hand on deal.
-  HandConfig _buildConfig() {
+  HandConfig _buildConfig({Map<int, int>? stacks}) {
+    final overrides = stacks ?? _stackOverrides;
     final sb = _amount(_sbCtrl, _isMtt ? 100 : 2);
     final bb = _amount(_bbCtrl, _isMtt ? 200 : 5);
     final stack = _amount(_stackCtrl, _isMtt ? 20000 : 500);
@@ -130,7 +134,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     ];
 
     return HandConfig(
-      initialStacks: {for (final s in seats) s: stack},
+      initialStacks: {for (final s in seats) s: overrides[s] ?? stack},
       buttonSeat: _buttonSeat,
       smallBlind: sb,
       bigBlind: bb,
@@ -156,6 +160,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// hero seat isn't known yet — the user builds the preflop action in order
   /// and claims their own seat when the action reaches it (see [_claimHero]).
   void _startHand() {
+    _stackOverrides = {};
     final cfg = _buildConfig();
     final seats = List.generate(_nPlayers, (i) => i + 1);
     setState(() {
@@ -191,6 +196,70 @@ class _CaptureScreenState extends State<CaptureScreen> {
       _heroSeat = seat;
       _heroCards = cards;
       _cfg = _buildConfig(); // re-stamp so heroSeat serialises correctly
+    });
+  }
+
+  /// Long-press a seat: set its starting stack for this hand. The engine is
+  /// rebuilt from the edited config and the action so far replayed (Inv. 7);
+  /// an edit that would change what already happened — an action no longer
+  /// legal, a call turned all-in, an all-in that no longer is — is refused,
+  /// and the user can undo back past that action instead.
+  Future<void> _editStack(int seat) async {
+    final cfg = _cfg!;
+    final pos = _positions[seat] ?? 'Seat $seat';
+    final ctrl = TextEditingController(
+        text: _isMtt
+            ? '${cfg.initialStacks[seat]}'
+            : _asDollars(cfg.initialStacks[seat]!));
+    HapticFeedback.selectionClick();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$pos stack'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.numberWithOptions(decimal: !_isMtt),
+          decoration: InputDecoration(
+            labelText: 'Stack at the start of this hand',
+            prefixText: _isMtt ? null : '\$ ',
+            suffixText: _isMtt ? 'chips' : null,
+          ),
+          onSubmitted: (_) => Navigator.pop(ctx, true),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Set stack')),
+        ],
+      ),
+    );
+    final text = ctrl.text;
+    if (ok != true || !mounted) return;
+    final amount = _isMtt
+        ? int.tryParse(text.trim())
+        : switch (double.tryParse(text.trim())) {
+            final d? => (d * 100).round(),
+            null => null,
+          };
+    if (amount == null || amount <= 0) {
+      _toast('Enter a stack above zero');
+      return;
+    }
+    final stacks = {..._stackOverrides, seat: amount};
+    final next = _buildConfig(stacks: stacks);
+    final replayed = replayUnchanged(next, _engine!);
+    if (replayed == null) {
+      _toast("That stack doesn't fit what $pos already did — undo first");
+      return;
+    }
+    setState(() {
+      _stackOverrides = stacks;
+      _cfg = next;
+      _engine = replayed;
     });
   }
 
@@ -589,6 +658,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             // blind that won unraised), pick the showdown winner, or enter a
             // villain's shown cards. _onResultSeatTap dispatches by context.
             onSeatTap: _resultTappable ? _onResultSeatTap : null,
+            onSeatLongPress: _editStack,
           ),
         ),
         const SizedBox(height: 10),

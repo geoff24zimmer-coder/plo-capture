@@ -20,4 +20,5 @@ cd tool/web_check && node check_home.mjs              # screenshots land here
   cancels native choosers, so it intercepts `Page.fileChooserOpened`).
 - `check_home.mjs` home buttons → sub-menu → setup · `check_equity.mjs`
   calculator (and browser timing) · `check_brand.mjs` splash frames + page
-  metadata · `check_quick.mjs` the "start then immediately end" session.
+  metadata · `check_quick.mjs` the "start then immediately end" session · `check_stacks.mjs`
+  long-press a seat → set its stack; a refused edit; undo then re-edit.

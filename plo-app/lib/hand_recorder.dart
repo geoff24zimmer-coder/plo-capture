@@ -54,6 +54,47 @@ class HandConfig {
       );
 }
 
+/// Rebuild [cfg]'s engine and re-apply [played] (an engine's log), requiring
+/// the replay to reproduce it exactly: every action, amount and all-in flag,
+/// and every seat's chips in. Returns the engine, or null when [cfg] — e.g. an
+/// edited starting stack — would change what already happened: an action no
+/// longer legal, a call that now puts someone all-in, an all-in that no longer
+/// is, a blind posted short. Callers refuse such an edit rather than rewrite
+/// the hand behind the user's back.
+HandEngine? replayUnchanged(HandConfig cfg, HandEngine played) {
+  final HandEngine e;
+  try {
+    e = cfg.buildEngine();
+    for (final a in played.log) {
+      final sized = a.action == ActionType.bet || a.action == ActionType.raise;
+      e.apply(a.seat, a.action, amount: sized ? a.amount : null);
+    }
+  } on EngineException {
+    return null;
+  }
+  if (e.status != played.status || e.log.length != played.log.length) {
+    return null;
+  }
+  for (var i = 0; i < e.log.length; i++) {
+    final a = e.log[i], b = played.log[i];
+    if (a.street != b.street ||
+        a.seat != b.seat ||
+        a.action != b.action ||
+        a.amount != b.amount ||
+        a.potBefore != b.potBefore ||
+        a.amountToCall != b.amountToCall ||
+        a.isAllIn != b.isAllIn) {
+      return null;
+    }
+  }
+  for (final s in played.players.keys) {
+    if (e.players[s]?.totalCommit != played.players[s]!.totalCommit) {
+      return null;
+    }
+  }
+  return e;
+}
+
 String _postTypeName(PostType t) => switch (t) {
       PostType.sb => 'sb',
       PostType.bb => 'bb',

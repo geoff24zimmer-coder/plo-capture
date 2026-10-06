@@ -91,14 +91,17 @@ The sell for logging hands is uploading them into our solver — not in-app
 stats. The hand-stats engine was dropped (2026-10-05); don't re-propose
 stats or review features built from logged hands (a biased sample anyway).
 
-1. Per-seat stack editing on the seat ring (long-press). (Side-pot/split-pot
-   math shipped: `engine.computePots()` layers totalCommit into main/side
-   pots with uncalled-bet return; recorder serializes multi-pot + split
-   winners; capture UI resolves pots by tap, chops by multi-tap.)
-2. MTT depth: ICM context, bounties, payout structures (data already
+1. MTT depth: ICM context, bounties, payout structures (data already
    captured).
-3. Export/aggregation layer: suit-isomorphism normalization, per-node
+2. Export/aggregation layer: suit-isomorphism normalization, per-node
    population frequencies for solver node-locking.
+
+Shipped from earlier roadmap items: side/split pots (`engine.computePots()`
+layers totalCommit into main/side pots with uncalled-bet return; capture
+resolves pots by tap, chops by multi-tap) and per-seat stack editing
+(long-press a seat on the capture ring; `replayUnchanged()` rebuilds from the
+edited `HandConfig` and refuses any edit that would change actions already
+entered — undo back past them instead).
 
 ## Known scaffold pragmatism
 

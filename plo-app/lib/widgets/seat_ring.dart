@@ -51,6 +51,8 @@ class SeatRing extends StatelessWidget {
   final Map<int, List<String>> shownCards;
   final Map<int, String> positions;
   final void Function(int seat)? onSeatTap; // set: seats become tappable
+  /// Long-press on a seat (capture: set that seat's starting stack).
+  final void Function(int seat)? onSeatLongPress;
   // Seat-select mode: the engine has blinds posted, but this isn't a live hand
   // yet, so suppress the pot pill, bet chips, and the first-actor glow — show
   // only seats, positions, and the dealer disk.
@@ -65,6 +67,7 @@ class SeatRing extends StatelessWidget {
     this.shownCards = const {},
     required this.positions,
     this.onSeatTap,
+    this.onSeatLongPress,
     this.selecting = false,
   });
 
@@ -271,6 +274,9 @@ class SeatRing extends StatelessWidget {
                     onTap: onSeatTap == null
                         ? null
                         : () => onSeatTap!(seats[k]),
+                    onLongPress: onSeatLongPress == null
+                        ? null
+                        : () => onSeatLongPress!(seats[k]),
                     child: _SeatBadge(
                       diameter: seatD,
                       player: engine.players[seats[k]]!,

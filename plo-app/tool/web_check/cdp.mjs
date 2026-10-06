@@ -53,6 +53,22 @@ export async function launch({ url }) {
     }
     await sleep(350);
   };
+  // Press-and-hold, for Flutter long-press gestures (default 500ms timeout).
+  const longPress = async (x, y, ms = 900) => {
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, pointerType: 'mouse' });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, pointerType: 'mouse' });
+    await sleep(ms);
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, pointerType: 'mouse' });
+    await sleep(350);
+  };
+  // Clear the focused text field (Backspace × n).
+  const clearField = async (n = 12) => {
+    for (let i = 0; i < n; i++) {
+      for (const type of ['keyDown', 'keyUp']) {
+        await send('Input.dispatchKeyEvent', { type, key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+      }
+    }
+  };
   const shot = async (path) => {
     const { data } = await send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(path, Buffer.from(data, 'base64'));
@@ -82,5 +98,5 @@ export async function launch({ url }) {
   };
   const close = () => { try { ws.close(); } catch {} chrome.kill('SIGKILL'); };
   const on = (method, cb) => { handlers[method] = cb; };
-  return { on, send, evaluate, click, shot, enableSemantics, find, tap, sleep, logs, close };
+  return { on, send, evaluate, click, longPress, clearField, shot, enableSemantics, find, tap, sleep, logs, close };
 }
