@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db/hand_store.dart';
 import '../models/hand_session.dart';
 import '../tracker/format.dart';
+import '../widgets/backup_sheet.dart';
 import '../widgets/hand_session_sheet.dart';
 import '../widgets/home_actions.dart';
 import 'capture_screen.dart';
@@ -48,13 +49,29 @@ class _LandingScreenState extends State<LandingScreen> {
               // scales to fit — so the buttons are ALWAYS visible, even on short
               // screens where a fixed-size logo would push them off the bottom.
               Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 340),
-                    child: Image.asset('assets/logo.png',
-                        fit: BoxFit.contain, semanticLabel: 'The PLO Show App'),
+                child: Stack(children: [
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 340),
+                      child: Image.asset('assets/logo.png',
+                          fit: BoxFit.contain,
+                          semanticLabel: 'The PLO Show App'),
+                    ),
                   ),
-                ),
+                  // Whole-device backup: covers the tracker AND logged hands,
+                  // so it lives here rather than inside either feature.
+                  Positioned(
+                    top: 0,
+                    right: -12,
+                    child: IconButton(
+                      tooltip: 'Backup & restore',
+                      icon: Icon(Icons.import_export,
+                          color: Colors.white.withValues(alpha: 0.6)),
+                      onPressed: () =>
+                          showBackupSheet(context, onRestored: _load),
+                    ),
+                  ),
+                ]),
               ),
               const SizedBox(height: 12),
               if (_current != null)

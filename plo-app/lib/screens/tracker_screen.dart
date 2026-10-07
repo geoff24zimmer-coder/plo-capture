@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import '../db/hand_store.dart';
 import '../export/download_web.dart';
-import '../export/file_pick_web.dart';
 import '../models/session.dart';
 import '../tracker/backup.dart';
 import '../tracker/format.dart';
@@ -107,76 +105,16 @@ class _TrackerScreenState extends State<TrackerScreen> {
             : 'Session ended · ${usd(net, signed: true)}')));
   }
 
-  static String _stamp() {
+  /// Tracker sessions as a spreadsheet. (The whole-device backup lives on
+  /// the home screen — it covers logged hands too.)
+  void _exportCsv() {
     final n = DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');
-    return '${n.year}-${two(n.month)}-${two(n.day)}';
+    downloadText(
+        'plo-show-sessions_${n.year}-${two(n.month)}-${two(n.day)}.csv',
+        sessionsCsv(_sessions ?? const []),
+        mime: 'text/csv');
   }
-
-  Future<void> _menu(String v) async {
-    final messenger = ScaffoldMessenger.of(context);
-    switch (v) {
-      case 'backup':
-        final doc = await HandStore.instance.exportAll();
-        downloadText('plo-show-backup_${_stamp()}.json', jsonEncode(doc));
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Backup downloaded — keep it somewhere safe.')));
-      case 'csv':
-        downloadText('plo-show-sessions_${_stamp()}.csv',
-            sessionsCsv(_sessions ?? const []),
-            mime: 'text/csv');
-      case 'restore':
-        await _restore();
-    }
-  }
-
-  Future<void> _restore() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final String? text;
-    try {
-      text = await pickTextFile();
-    } catch (_) {
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Couldn’t read that file.')));
-      return;
-    }
-    if (text == null || !mounted) return;
-    final BackupData data;
-    try {
-      data = parseBackup(text);
-    } on FormatException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      return;
-    }
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Restore backup?'),
-        content: Text(
-            'Adds ${_count(data.trackerSessions.length, 'tracker session')} '
-            'and ${_count(data.hands.length, 'logged hand')}. Anything '
-            'already on this device is kept as-is.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Restore')),
-        ],
-      ),
-    );
-    if (yes != true) return;
-    final r = await HandStore.instance.importBackup(data);
-    await _load();
-    messenger.showSnackBar(SnackBar(
-        content: Text('Restored '
-            '${_count(r.trackerAdded, 'tracker session')}, '
-            '${_count(r.handsAdded, 'logged hand')}'
-            '${r.skipped > 0 ? ' (${r.skipped} already here)' : ''}.')));
-  }
-
-  static String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
   @override
   Widget build(BuildContext context) {
@@ -195,31 +133,10 @@ class _TrackerScreenState extends State<TrackerScreen> {
               icon: const Icon(Icons.edit_calendar),
               onPressed: _logSession,
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Backup & export',
-              onSelected: _menu,
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                    value: 'backup',
-                    child: ListTile(
-                        leading: Icon(Icons.download, size: 20),
-                        title: Text('Download backup'),
-                        subtitle: Text(
-                            'Tracker + logged hands, to restore later'),
-                        contentPadding: EdgeInsets.zero)),
-                PopupMenuItem(
-                    value: 'restore',
-                    child: ListTile(
-                        leading: Icon(Icons.restore, size: 20),
-                        title: Text('Restore from backup'),
-                        contentPadding: EdgeInsets.zero)),
-                PopupMenuItem(
-                    value: 'csv',
-                    child: ListTile(
-                        leading: Icon(Icons.table_chart_outlined, size: 20),
-                        title: Text('Export sessions (CSV)'),
-                        contentPadding: EdgeInsets.zero)),
-              ],
+            IconButton(
+              tooltip: 'Export sessions (CSV)',
+              icon: const Icon(Icons.table_chart_outlined),
+              onPressed: _exportCsv,
             ),
           ],
           bottom: const TabBar(tabs: [

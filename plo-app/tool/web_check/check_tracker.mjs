@@ -7,8 +7,9 @@ try {
   await sleep(9000); // splash + boot
   await b.enableSemantics(); await sleep(800);
   await b.shot(S + 't0_landing.png');
-  await b.tap('Tracker'); await sleep(2500);
-  await b.tap('Backup & export'); await sleep(600);
+  // Backup & restore lives on the home screen (it covers hands too).
+  await b.tap('Backup & restore'); await sleep(800);
+  await b.shot(S + 't0b_backup_sheet.png');
   // Headless can't show a native chooser — intercept it and feed the input.
   await b.send('Page.setInterceptFileChooserDialog', { enabled: true });
   const chosen = new Promise((r) => b.on('Page.fileChooserOpened', r));
@@ -18,6 +19,8 @@ try {
   await sleep(1500);
   await b.shot(S + 't1_restore_confirm.png');
   await b.tap('Restore', { exact: true }); await sleep(2500);
+  await b.shot(S + 't1b_restored.png');
+  await b.tap('Session tracker'); await sleep(2500);
   await b.shot(S + 't2_calendar.png');
   await b.tap('Previous month'); await sleep(800);
   await b.shot(S + 't3_calendar_sep.png');
@@ -35,12 +38,9 @@ try {
   await b.tap('Sessions', { exact: true }); await sleep(1200);
   await b.shot(S + 't8_sessions.png');
   await b.tap('Champions', { nth: 0 }); await sleep(1800);
-  await b.shot(S + 't9_session_screen.png');
-  await b.tap('Edit session'); await sleep(1000);
-  await b.shot(S + 't10_editor.png');
+  await b.shot(S + 't10_editor.png'); // a tracker row opens its editor
   await b.tap('Close'); await sleep(800);
-  await b.tap('Back'); await sleep(800);
-  await b.tap('Log session'); await sleep(1000);
+  await b.tap('Log a past session'); await sleep(1000);
   await b.shot(S + 't11_log.png');
   console.log('LOGS', JSON.stringify(b.logs.slice(-15)));
 } catch (e) {

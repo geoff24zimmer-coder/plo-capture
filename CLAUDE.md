@@ -41,7 +41,8 @@ to measure this.
   anchored bottom, amber pointer on the actor. Reused by capture AND replayer.
 - `lib/tracker/` — session tracker (pure Dart): `stats.dart` (cash $/hr, bb/hr,
   SD + 95% CI, breakdowns; MTT ROI/ITM; calendar `Ledger`), `backup.dart`
-  (whole-device JSON backup/restore + CSV). Win rate comes ONLY from session
+  (whole-device JSON backup/restore — tracker AND hands, so its UI is on the
+  home screen, `widgets/backup_sheet.dart` — + the tracker's sessions CSV). Win rate comes ONLY from session
   buy-in/cash-out (`Session.buyIn/cashOut`, cents even for MTT) — never from
   summing captured hands (biased sample). Unresolved sessions are excluded,
   not filled in. UI: `screens/tracker_screen.dart` (Calendar/Stats/Sessions;
