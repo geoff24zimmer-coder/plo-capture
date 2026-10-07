@@ -34,9 +34,12 @@ jobs:
 
       - run: flutter pub get
 
-      # Keep the sqflite web worker + sqlite3 wasm in sync with the resolved
-      # package version (they're also committed, but this guards against drift).
-      - run: dart run sqflite_common_ffi_web:setup
+      # The sqflite web worker + sqlite3 wasm are committed in web/ (pinned by
+      # pubspec.lock). Regenerate them locally with
+      # `dart run sqflite_common_ffi_web:setup` when bumping
+      # sqflite_common_ffi_web. Not run here: on Flutter 3.47.6 (2026-10-07)
+      # its webdev build crashes in CI, and the output matched the committed
+      # files byte for byte anyway.
 
       - uses: actions/configure-pages@v6
         with:
