@@ -26,6 +26,42 @@ HandEngine buttonStraddleHand({StraddleActionRule rule = StraddleActionRule.utgF
   );
 }
 
+/// The canonical hand's full action sequence, preflop to the river call.
+const canonicalMoves = <(int, ActionType, int?)>[
+  (7, ActionType.call, null), // UTG limps the straddle
+  (8, ActionType.fold, null),
+  (1, ActionType.call, null),
+  (2, ActionType.fold, null),
+  (3, ActionType.raise, 5700), // CO isolates to exactly the pot
+  (5, ActionType.fold, null),
+  (6, ActionType.fold, null),
+  (4, ActionType.call, null), // straddler acts last
+  (7, ActionType.call, null),
+  (1, ActionType.fold, null),
+  (7, ActionType.check, null), // flop
+  (3, ActionType.bet, 14100),
+  (4, ActionType.fold, null),
+  (7, ActionType.call, null),
+  (7, ActionType.check, null), // turn
+  (3, ActionType.check, null),
+  (7, ActionType.bet, 23500), // river
+  (3, ActionType.raise, 104200), // all-in, stack-capped
+  (7, ActionType.call, null),
+];
+
+/// Everything observable about an engine at one moment.
+String snapshot(HandEngine e) => [
+      e.street,
+      e.status,
+      e.pot,
+      e.currentBet,
+      e.status == HandStatus.acting ? e.whoseTurn() : null,
+      e.log.length,
+      for (final s in e.players.keys)
+        '${e.players[s]!.stack}/${e.players[s]!.streetCommit}/'
+            '${e.players[s]!.totalCommit}/${e.players[s]!.folded}',
+    ].join('|');
+
 void main() {
   group('Button straddle hand (canonical example-hand.json)', () {
     test('preflop order opens UTG, straddler acts last', () {
@@ -102,6 +138,54 @@ void main() {
           (a) => a.street == Street.river && a.action == ActionType.raise);
       expect(riverShove.potBefore, 70500);
       expect(riverShove.amountToCall, 23500);
+    });
+
+    test('replay from scratch reproduces every step (undo, replayer)', () {
+      // Invariant 7: undo and the replayer rebuild the engine and re-apply
+      // actions. Rebuilding to step k must match the live engine at step k.
+      final live = buttonStraddleHand();
+      final seen = [snapshot(live)];
+      for (final (seat, a, amt) in canonicalMoves) {
+        live.apply(seat, a, amount: amt);
+        seen.add(snapshot(live));
+      }
+      expect(live.pot, 255400);
+      for (var k = 0; k <= canonicalMoves.length; k++) {
+        final e = buttonStraddleHand();
+        for (final (seat, a, amt) in canonicalMoves.take(k)) {
+          e.apply(seat, a, amount: amt);
+        }
+        expect(snapshot(e), seen[k], reason: 'step $k');
+      }
+    });
+
+    test('illegal actions are rejected and leave the hand untouched', () {
+      final e = buttonStraddleHand();
+      for (final (seat, a, amt) in canonicalMoves.take(4)) {
+        e.apply(seat, a, amount: amt);
+      }
+      // CO (seat 3) to act, facing the 1,000 straddle; pot max 5,700.
+      final before = snapshot(e);
+      void rejects(int seat, ActionType a, [int? amount]) {
+        expect(() => e.apply(seat, a, amount: amount),
+            throwsA(isA<EngineException>()),
+            reason: '$seat $a $amount');
+        expect(snapshot(e), before, reason: 'state changed by $a');
+      }
+
+      rejects(4, ActionType.call); // out of turn
+      rejects(3, ActionType.check); // facing a bet
+      rejects(3, ActionType.raise, 5800); // above the pot limit
+      rejects(3, ActionType.raise, 1500); // below the minimum, not all-in
+      rejects(3, ActionType.raise); // a raise needs its raise-to amount
+
+      // And once the hand is over, nothing more applies.
+      for (final (seat, a, amt) in canonicalMoves.skip(4)) {
+        e.apply(seat, a, amount: amt);
+      }
+      expect(e.status, HandStatus.showdown);
+      expect(() => e.apply(7, ActionType.check),
+          throwsA(isA<EngineException>()));
     });
 
     test('sb_first house rule opens action on the small blind', () {
