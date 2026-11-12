@@ -52,8 +52,18 @@ jobs:
       # "/<repo>/"; that URL stops working once we move to the apex of the
       # subdomain — assets would 404 there. The CNAME file in web/ pins the
       # custom domain into the published artifact.)
+      # The AI coach button (The Green Room, ai-hand-reviewer DECISIONS.md D30-D32). COACH_URL is the coach
+      # server; COACH_INVITE is its invite code, kept in the repo's Actions secrets so it isn't in this public
+      # repo (it does end up in the built JavaScript, like any key a web page uses). Without them the build
+      # simply has no coach button.
       - name: Build web
-        run: flutter build web --release --base-href "/"
+        env:
+          COACH_URL: https://skynet.tail9d34ad.ts.net:10000
+          COACH_INVITE: ${{ secrets.COACH_INVITE }}
+        run: >-
+          flutter build web --release --base-href "/"
+          --dart-define=COACH_URL="$COACH_URL"
+          --dart-define=COACH_INVITE="$COACH_INVITE"
 
       - uses: actions/upload-pages-artifact@v5
         with:

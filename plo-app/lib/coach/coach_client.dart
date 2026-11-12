@@ -17,7 +17,8 @@ const String coachUrl = String.fromEnvironment('COACH_URL');
 const String coachInvite = String.fromEnvironment('COACH_INVITE');
 
 /// True when this build can ask the coach.
-const bool coachEnabled = coachUrl != '';
+// Both are needed: a URL without the invite would show a button that only gets "no invite" back.
+const bool coachEnabled = coachUrl != '' && coachInvite != '';
 
 /// Whether to offer the coach for this stored hand. The coach reviews what the player did before the flop, in cash
 /// games: so the coach must be on in this build, and the hero must have a preflop action (a spot saved before the

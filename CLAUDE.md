@@ -118,7 +118,11 @@ It shows in two places, both after a hand is saved, never while one is being
 entered: the replay, and a "Hand saved" panel on the next-hand screen
 (cleared when the next hand starts, so logging is no slower). Both only when
 the hero made a move before the flop (`coachCanReview`); a spot saved before
-the hero acted has nothing to review.
+the hero acted has nothing to review. The deploy workflow builds with
+`COACH_URL` (the coach server, on Geoff's machine behind Tailscale Funnel) and
+`COACH_INVITE` (an Actions secret); if the secret is missing there's simply no
+button. The coach server only answers this site's address and caps reviews at
+40 a day for everyone together.
 
 1. MTT depth: ICM context, bounties, payout structures (data already
    captured).
