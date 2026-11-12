@@ -53,12 +53,16 @@ class CoachDecision {
   final String verdict;
   final String why;
   final String nextTime;
+
+  /// "Go deeper" (ai-hand-reviewer D31): the strategy points, closed until tapped. Empty for older reviews.
+  final List<String> deepDive;
   const CoachDecision({
     required this.actionRef,
     required this.label,
     required this.verdict,
     required this.why,
     required this.nextTime,
+    this.deepDive = const [],
   });
 }
 
@@ -85,6 +89,10 @@ class CoachReview {
         verdict: d['verdict'] as String,
         why: d['why'] as String,
         nextTime: d['next_time'] as String,
+        deepDive: [
+          for (final p in (d['deep_dive'] is List ? d['deep_dive'] as List : const []))
+            if (p is String && p.trim().isNotEmpty) p
+        ],
       ));
     }
     return CoachReview(decisions, [for (final a in as) if (a is String) a]);
@@ -103,7 +111,7 @@ class CoachReply {
 const _sorry = "Sorry, I couldn't reach the coach. Please check your connection and try again.";
 
 /// Asks the coach to review [hand], the hand exactly as the app stores it (plo-hand-history.schema.json).
-/// The coach takes about half a minute; this waits up to three minutes.
+/// The coach takes about a minute; this waits up to three minutes.
 Future<CoachReply> requestReview(
   Map<String, dynamic> hand, {
   http.Client? client,

@@ -20,6 +20,12 @@ const _review = {
       'verdict': 'A good 3-bet with a strong double-suited hand in position.',
       'why': 'The cutoff opened and you had position.',
       'next_time': 'Re-raise your best double-suited hands on the button.',
+      'deep_dive': [
+        'Blockers: your A♠ makes aces less likely for the cutoff.',
+        'Reverse implied odds: your heart flush is only queen-high.',
+        'Sizing: the pot-sized raise keeps you heads-up in position.',
+        'Your flop plan: bet high, connected flops; slow down on low ones.',
+      ],
       'numbers_used': ['n1'],
     },
     {
@@ -49,6 +55,8 @@ void main() {
       expect(r.decisions[1].label, CoachLabel.judgment);
       expect(r.decisions[1].label.words, "It depends on reads we don't have.");
       expect(r.assumptions, ['I assumed everyone started with \$500.']);
+      expect(r.decisions[0].deepDive, hasLength(4));
+      expect(r.decisions[1].deepDive, isEmpty); // older reviews have none
     });
 
     test('a review in the wrong shape is refused whole, never half-shown', () {
@@ -96,10 +104,13 @@ void main() {
       late http.Request sent;
       final client = MockClient((req) async {
         sent = req;
-        return http.Response(jsonEncode({'ok': true, 'review': _review, 'ms': 30000}), 200);
+        // As the server sends it: UTF-8 bytes (the review has suit symbols like ♠).
+        return http.Response.bytes(utf8.encode(jsonEncode({'ok': true, 'review': _review, 'ms': 30000})), 200,
+            headers: {'content-type': 'application/json; charset=utf-8'});
       });
       final reply = await requestReview(_hand, client: client, url: 'https://coach.test', invite: 'abc');
       expect(reply.ok, isTrue);
+      expect(reply.review!.decisions[0].deepDive[0], startsWith('Blockers: your A♠'));
       expect(sent.url.toString(), 'https://coach.test/api/review');
       expect(sent.headers['x-invite'], 'abc');
       expect(jsonDecode(sent.body), {'plohand': _hand});
@@ -141,7 +152,7 @@ void main() {
       final answer = Completer<CoachReply>();
       await pump(t, (_) => answer.future);
       expect(find.text('Looking at your hand…'), findsOneWidget);
-      expect(find.text('The coach takes about half a minute.'), findsOneWidget);
+      expect(find.text('The coach takes about a minute.'), findsOneWidget);
       expect(find.text(disclosure), findsOneWidget);
 
       answer.complete(CoachReply.ok(CoachReview.fromJson(_review)!));
@@ -153,6 +164,21 @@ void main() {
       expect(find.text('It depends on how tight the cutoff is.'), findsOneWidget);
       // The follow-up questions wait for "Ask a question": nothing that looks tappable and isn't.
       expect(find.textContaining('What if the cutoff'), findsNothing);
+    });
+
+    testWidgets('"Go deeper" is closed until tapped, then shows every point at 20 px', (t) async {
+      await pump(t, (_) async => CoachReply.ok(CoachReview.fromJson(_review)!));
+      await t.pumpAndSettle();
+      expect(find.text('Go deeper'), findsOneWidget); // only the decision that has points
+      expect(find.textContaining('Blockers:'), findsNothing);
+      expect(t.getSize(find.ancestor(of: find.text('Go deeper'), matching: find.byType(InkWell))).height,
+          greaterThanOrEqualTo(56));
+      await t.tap(find.text('Go deeper'));
+      await t.pumpAndSettle();
+      final point = find.text('• Blockers: your A♠ makes aces less likely for the cutoff.');
+      expect(point, findsOneWidget);
+      expect(t.widget<Text>(point).style?.fontSize, greaterThanOrEqualTo(20));
+      expect(find.textContaining('Your flop plan:'), findsOneWidget);
     });
 
     testWidgets('a problem is said plainly, and Try again asks once more', (t) async {

@@ -2,8 +2,8 @@
 // study screen, never part of capture at the table.
 //
 // Built for older players first (ai-hand-reviewer docs/UX_SIMPLICITY.md): body text at least 20 px, buttons at least
-// 56 px tall, one main action. The coach takes about half a minute, so the waiting view says what's happening and the
-// player can stop.
+// 56 px tall, one main action. The coach takes about a minute, so the waiting view says what's happening and the
+// player can stop. Each decision's "Go deeper" (D31) stays closed until tapped, so the short review is easy to read.
 
 import 'dart:async';
 
@@ -24,6 +24,8 @@ const _steps = [
   'Looking at your hand…',
   'Working out the pot and the price…',
   'Comparing your cards with likely hands…',
+  'Thinking through the ranges and blockers…',
+  'Writing your deep dive…',
   'Checking every number…',
   'Taking a second look…',
   'Almost done…',
@@ -69,7 +71,7 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
       _step = 0;
     });
     _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 6), (_) {
+    _ticker = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted) setState(() => _step = (_step + 1).clamp(0, _steps.length - 1));
     });
     final reply = await widget.request(widget.hand);
@@ -139,7 +141,7 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            const Text('The coach takes about half a minute.',
+            const Text('The coach takes about a minute.',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 20, color: Colors.white70)),
             const SizedBox(height: 28),
             _big('Stop', primary: false, onPressed: () => Navigator.of(context).pop()),
@@ -233,9 +235,72 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
             const SizedBox(height: 12),
             const Text('NEXT TIME', style: part),
             Text(d.nextTime, style: body.copyWith(color: _gold)),
+            if (d.deepDive.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _DeepDive(points: d.deepDive),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+/// "Go deeper": a big tappable row that opens the coach's strategy points.
+class _DeepDive extends StatefulWidget {
+  final List<String> points;
+  const _DeepDive({required this.points});
+  @override
+  State<_DeepDive> createState() => _DeepDiveState();
+}
+
+class _DeepDiveState extends State<_DeepDive> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _gold.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              button: true,
+              expanded: _open,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => setState(() => _open = !_open),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(children: [
+                      Icon(_open ? Icons.expand_less : Icons.expand_more, color: _gold),
+                      const SizedBox(width: 8),
+                      const Text('Go deeper',
+                          style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: _gold)),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+            if (_open)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final p in widget.points)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text('• $p', style: const TextStyle(fontSize: 20, height: 1.4)),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
 }
