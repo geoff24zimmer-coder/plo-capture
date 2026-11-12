@@ -17,7 +17,17 @@ const String coachUrl = String.fromEnvironment('COACH_URL');
 const String coachInvite = String.fromEnvironment('COACH_INVITE');
 
 /// True when this build can ask the coach.
-bool get coachEnabled => coachUrl.isNotEmpty;
+const bool coachEnabled = coachUrl != '';
+
+/// Whether to offer the coach for this stored hand. The coach reviews what the player did before the flop, in cash
+/// games: so the coach must be on in this build, and the hero must have a preflop action (a spot saved before the
+/// hero acted has nothing to review).
+bool coachCanReview(Map<String, dynamic> hand, {bool enabled = coachEnabled}) {
+  if (!enabled || hand['session']?['game_type'] != 'cash') return false;
+  final hero = hand['hero']?['seat'];
+  final actions = (hand['actions'] as List?) ?? const [];
+  return actions.any((a) => a is Map && a['street'] == 'preflop' && a['seat'] == hero);
+}
 
 /// The three labels, and what each means in plain words (the coach contract).
 enum CoachLabel {

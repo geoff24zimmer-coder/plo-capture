@@ -60,6 +60,37 @@ void main() {
     });
   });
 
+  group('coachCanReview: when "Hand saved" offers the coach', () {
+    Map<String, dynamic> hand({String game = 'cash', List<Map<String, dynamic>>? actions}) => {
+          'session': {'game_type': game},
+          'hero': {'seat': 4, 'cards': []},
+          'actions': actions ??
+              [
+                {'street': 'preflop', 'seat': 3, 'action': 'raise', 'amount': 2000},
+                {'street': 'preflop', 'seat': 4, 'action': 'call'},
+              ],
+        };
+
+    test('a cash hand where the hero acted before the flop', () {
+      expect(coachCanReview(hand(), enabled: true), isTrue);
+    });
+
+    test('never when the coach is off in this build (the normal build)', () {
+      expect(coachCanReview(hand(), enabled: false), isFalse);
+      expect(coachCanReview(hand()), isFalse); // tests run without COACH_URL
+    });
+
+    test('not for a spot saved before the hero acted, or a hero who only acted after the flop', () {
+      expect(coachCanReview(hand(actions: [{'street': 'preflop', 'seat': 3, 'action': 'raise', 'amount': 2000}]), enabled: true),
+          isFalse);
+      expect(coachCanReview(hand(actions: [{'street': 'flop', 'seat': 4, 'action': 'check'}]), enabled: true), isFalse);
+    });
+
+    test('not for tournaments, which the coach can\'t review yet', () {
+      expect(coachCanReview(hand(game: 'mtt'), enabled: true), isFalse);
+    });
+  });
+
   group('requestReview', () {
     test('sends the stored hand as plohand, with the invite code', () async {
       late http.Request sent;

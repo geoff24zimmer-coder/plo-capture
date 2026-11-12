@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../plo_engine.dart';
+import '../coach/coach_client.dart';
 import '../hand_recorder.dart';
 import '../util.dart';
 import '../models/hand_session.dart';
@@ -10,6 +11,7 @@ import '../onboarding.dart';
 import '../widgets/seat_ring.dart';
 import '../widgets/action_bar.dart';
 import '../widgets/card_picker.dart';
+import 'coach_review_screen.dart';
 
 enum _Phase { setup, acting, result }
 
@@ -63,6 +65,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   // ---- live hand state
   _Phase _phase = _Phase.setup;
+
+  /// The hand just saved, offered to the AI coach on the next-hand screen (ai-hand-reviewer D30): one tap from Save
+  /// to the review, instead of going through Past sessions. Cleared when the next hand starts, so it never slows
+  /// logging down.
+  Map<String, dynamic>? _justSaved;
   HandConfig? _cfg;
   HandEngine? _engine;
   Map<int, String> _positions = {};
@@ -162,6 +169,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// and claims their own seat when the action reaches it (see [_claimHero]).
   void _startHand() {
     _stackOverrides = {};
+    _justSaved = null;
     final cfg = _buildConfig();
     final seats = List.generate(_nPlayers, (i) => i + 1);
     setState(() {
@@ -479,11 +487,55 @@ class _CaptureScreenState extends State<CaptureScreen> {
       );
 
   Future<void> _saveHand() async {
-    await HandStore.instance.insertHand(_buildJson());
+    final json = _buildJson();
+    await HandStore.instance.insertHand(json);
     if (!mounted) return;
     _toast('Hand saved');
-    setState(() => _phase = _Phase.setup); // ready for the next one
+    setState(() {
+      _justSaved = coachCanReview(json) ? json : null;
+      _phase = _Phase.setup; // ready for the next one
+    });
   }
+
+  void _openCoach(Map<String, dynamic> json) {
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => CoachReviewScreen(hand: json)));
+  }
+
+  Widget _justSavedPanel(Map<String, dynamic> json) => Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                const Expanded(
+                    child: Text('Hand saved',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+                IconButton(
+                  tooltip: 'Hide',
+                  onPressed: () => setState(() => _justSaved = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: 60,
+                child: FilledButton.icon(
+                  onPressed: () => _openCoach(json),
+                  icon: const Icon(Icons.school_outlined),
+                  label: const Text('AI coach review',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFF0C75A),
+                      foregroundColor: Colors.black),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
   /// True while the hand is live AND the action has reached the hero — either
   /// it's the hero's turn now, or the hero has already acted. Lets the user
@@ -498,10 +550,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// Save the hand as-is, mid-action. Partial info is first-class: no winner,
   /// just the action up to this point and the hero's spot.
   Future<void> _saveSpot() async {
-    await HandStore.instance.insertHand(_buildJson(complete: false));
+    final json = _buildJson(complete: false);
+    await HandStore.instance.insertHand(json);
     if (!mounted) return;
     _toast('Spot saved');
-    setState(() => _phase = _Phase.setup);
+    setState(() {
+      _justSaved = coachCanReview(json) ? json : null;
+      _phase = _Phase.setup;
+    });
   }
 
   /// Copy the record JSON to the clipboard. `complete: false` copies a decision
@@ -572,6 +628,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (_justSaved != null) _justSavedPanel(_justSaved!),
         Row(children: [
           Expanded(
               child: TextField(

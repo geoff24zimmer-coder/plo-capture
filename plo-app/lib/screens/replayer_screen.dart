@@ -495,9 +495,10 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
                 ],
               ),
             ),
-            // The AI coach (ai-hand-reviewer D30): only in builds that set COACH_URL, never on a shared link, and
-            // only here in the replay, after the hand — a study tool, never part of capture at the table.
-            if (coachEnabled && !widget.shared && _json != null)
+            // The AI coach (ai-hand-reviewer D30): only in builds that set COACH_URL, never on a shared link, only
+            // when the hero made a move before the flop (otherwise there's nothing to review), and only here in the
+            // replay or on "Hand saved" — never while a hand is being entered.
+            if (!widget.shared && _json != null && coachCanReview(_json!))
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: SizedBox(

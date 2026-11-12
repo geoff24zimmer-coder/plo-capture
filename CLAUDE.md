@@ -114,7 +114,11 @@ one hand's preflop decisions; it is not a stats feature. The replayer shows
 as-is (`POST {COACH_URL}/api/review`, body `{"plohand": …}`); the coach
 server converts it, checks it and does every number. Code: `lib/coach/`,
 `lib/screens/coach_review_screen.dart`, `test/coach_review_test.dart`.
-It lives only in the replay (study after the session), never in capture.
+It shows in two places, both after a hand is saved, never while one is being
+entered: the replay, and a "Hand saved" panel on the next-hand screen
+(cleared when the next hand starts, so logging is no slower). Both only when
+the hero made a move before the flop (`coachCanReview`); a spot saved before
+the hero acted has nothing to review.
 
 1. MTT depth: ICM context, bounties, payout structures (data already
    captured).
