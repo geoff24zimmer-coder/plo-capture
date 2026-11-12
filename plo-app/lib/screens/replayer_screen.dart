@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import '../coach/coach_client.dart';
 import '../db/hand_store.dart';
 import '../export/download_web.dart';
 import '../export/gif_export.dart';
@@ -14,6 +15,7 @@ import '../plo_engine.dart';
 import '../share_link.dart';
 import '../util.dart';
 import '../widgets/seat_ring.dart';
+import 'coach_review_screen.dart';
 import 'landing_screen.dart';
 
 /// Step through a stored hand action-by-action. Each step rebuilds the
@@ -42,6 +44,7 @@ class ReplayerScreen extends StatefulWidget {
 
 class _ReplayerScreenState extends State<ReplayerScreen> {
   LoadedHand? _hand;
+  Map<String, dynamic>? _json; // the stored record, sent as-is to the AI coach
   HandEngine? _engine;
   int _step = 0;
   AllInEv? _allIn; // equity when the money went in (shown on the last step)
@@ -74,6 +77,7 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
     if (!mounted) return;
     setState(() {
       _hand = loaded;
+      _json = json;
       _step = 0;
       _engine = loaded.engineAtStep(0);
     });
@@ -491,10 +495,35 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
                 ],
               ),
             ),
+            // The AI coach (ai-hand-reviewer D30): only in builds that set COACH_URL, never on a shared link, and
+            // only here in the replay, after the hand — a study tool, never part of capture at the table.
+            if (coachEnabled && !widget.shared && _json != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: FilledButton.icon(
+                    onPressed: _exporting ? null : _openCoach,
+                    icon: const Icon(Icons.school_outlined),
+                    label: const Text('AI coach review',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFF0C75A),
+                        foregroundColor: Colors.black),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  void _openCoach() {
+    _pause();
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => CoachReviewScreen(hand: _json!)));
   }
 
   String _caption(LoadedHand h, HandEngine e) {

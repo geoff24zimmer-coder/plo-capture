@@ -105,6 +105,17 @@ The sell for logging hands is uploading them into our solver — not in-app
 stats. The hand-stats engine was dropped (2026-10-05); don't re-propose
 stats or review features built from logged hands (a biased sample anyway).
 
+Exception (owner, 2026-11-12): the **AI coach review** button. Geoff chose to
+put The Green Room's coach (repo `~/Antigravity-x64/Projects/ai-hand-reviewer`,
+DECISIONS.md D30) into this app rather than build a second app. It reviews
+one hand's preflop decisions; it is not a stats feature. The replayer shows
+"AI coach review" only in builds made with `--dart-define=COACH_URL=…` (and
+`COACH_INVITE=…`); a normal build has no button. The stored hand JSON is sent
+as-is (`POST {COACH_URL}/api/review`, body `{"plohand": …}`); the coach
+server converts it, checks it and does every number. Code: `lib/coach/`,
+`lib/screens/coach_review_screen.dart`, `test/coach_review_test.dart`.
+It lives only in the replay (study after the session), never in capture.
+
 1. MTT depth: ICM context, bounties, payout structures (data already
    captured).
 2. Export/aggregation layer: suit-isomorphism normalization, per-node
