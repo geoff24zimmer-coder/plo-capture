@@ -51,8 +51,10 @@ class SeatRing extends StatelessWidget {
   final Map<int, List<String>> shownCards;
   final Map<int, String> positions;
   final void Function(int seat)? onSeatTap; // set: seats become tappable
-  /// Long-press on a seat (capture: set that seat's starting stack).
+  /// Long-press on a seat (capture: set that seat's player type and starting stack).
   final void Function(int seat)? onSeatLongPress;
+  /// A short read shown under a seat, such as "Station" (ai-hand-reviewer D35). Never shown on the hero.
+  final Map<int, String> seatNotes;
   // Seat-select mode: the engine has blinds posted, but this isn't a live hand
   // yet, so suppress the pot pill, bet chips, and the first-actor glow — show
   // only seats, positions, and the dealer disk.
@@ -68,6 +70,7 @@ class SeatRing extends StatelessWidget {
     required this.positions,
     this.onSeatTap,
     this.onSeatLongPress,
+    this.seatNotes = const {},
     this.selecting = false,
   });
 
@@ -76,6 +79,7 @@ class SeatRing extends StatelessWidget {
   static const _goldMid = Color(0xFFC9A536);
   static const _goldDk = Color(0xFF5E441C);
   static const _teal = Color(0xFF10B981); // actor / EV-positive accent (emerald)
+  static const _typeFill = Color(0xFF8AB4F8); // player-type label under a seat (D35)
   static const _feltCtr = Color(0xFF2C7A52);
   static const _feltEdge = Color(0xFF123E2A);
   static const _seatFill = Color(0xFF16181B);
@@ -283,6 +287,7 @@ class SeatRing extends StatelessWidget {
                       label: positions[seats[k]] ?? '?',
                       isHero: heroSeat != null && seats[k] == heroSeat,
                       isActor: seats[k] == actor,
+                      note: seatNotes[seats[k]],
                     ),
                   ),
                 ),
@@ -579,12 +584,14 @@ class _SeatBadge extends StatelessWidget {
   final String label;
   final bool isHero;
   final bool isActor;
+  final String? note;
   const _SeatBadge({
     required this.diameter,
     required this.player,
     required this.label,
     required this.isHero,
     required this.isActor,
+    this.note,
   });
 
   @override
@@ -623,7 +630,10 @@ class _SeatBadge extends StatelessWidget {
                           spreadRadius: isActor ? 1.5 : 0.5),
                     ],
             ),
-            child: Column(
+            // Scales down only if it wouldn't fit (large system text sizes); otherwise unchanged.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -650,7 +660,23 @@ class _SeatBadge extends StatelessWidget {
                 ),
               ],
             ),
+            ),
           ),
+          if (!isHero && note != null)
+            Container(
+              margin: const EdgeInsets.only(top: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: SeatRing._typeFill,
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(note!.toUpperCase(),
+                  style: TextStyle(
+                      fontSize: diameter * 0.16,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: Colors.black)),
+            ),
           if (isHero)
             Container(
               margin: const EdgeInsets.only(top: 3),

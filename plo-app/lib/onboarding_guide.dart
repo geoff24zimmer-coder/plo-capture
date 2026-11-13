@@ -42,7 +42,7 @@ final List<_Step> _steps = [
     _b('Start hand'),
     _t('. Someone deeper or shorter? '),
     _b('Long-press their seat'),
-    _t(' on the table to set their stack, any time during the hand.'),
+    _t(' to set their stack, or how they play for the AI coach.'),
   ]),
   _Step(Icons.touch_app, _goldLight, '2 · Replay the action in order', [
     _t('An '),

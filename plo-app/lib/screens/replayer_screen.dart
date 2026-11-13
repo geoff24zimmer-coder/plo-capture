@@ -16,6 +16,7 @@ import '../share_link.dart';
 import '../util.dart';
 import '../widgets/seat_ring.dart';
 import 'coach_review_screen.dart';
+import '../models/player_type.dart';
 import 'landing_screen.dart';
 
 /// Step through a stored hand action-by-action. Each step rebuilds the
@@ -350,6 +351,15 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
   void _goHome() => Navigator.push(
       context, MaterialPageRoute(builder: (_) => const LandingScreen()));
 
+  /// Player types saved with the hand (ai-hand-reviewer D35), shown under their seats.
+  Map<int, String> get _seatNotes => {
+        for (final p in (_json?['players'] as List? ?? const []))
+          if (p is Map &&
+              p['seat'] is int &&
+              PlayerType.fromTags(p['tags']) != null)
+            p['seat'] as int: PlayerType.fromTags(p['tags'])!.label,
+      };
+
   @override
   Widget build(BuildContext context) {
     final h = _hand;
@@ -411,7 +421,8 @@ class _ReplayerScreenState extends State<ReplayerScreen> {
                           shownCards: e.status == HandStatus.showdown
                               ? h.shownCards
                               : const {},
-                          positions: h.positions),
+                          positions: h.positions,
+                          seatNotes: _seatNotes),
                     ),
                     const SizedBox(height: 6),
                     SizedBox(

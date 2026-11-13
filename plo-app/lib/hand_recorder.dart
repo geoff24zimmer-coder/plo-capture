@@ -1,3 +1,4 @@
+import 'models/player_type.dart';
 import 'plo_engine.dart';
 
 /// Tournament blind level in chips. Captured per hand because levels
@@ -125,6 +126,7 @@ Map<String, dynamic> buildHandJson({
   int? winnerSeat,
   List<List<int>>? potWinners, // winners per computePots() pot; splits allowed
   Map<int, List<String>> shownCards = const {}, // villain seat -> shown cards
+  Map<int, PlayerType> playerTypes = const {}, // villain seat -> quick read (never the hero)
   int? rake,
   String? sessionId,
   String? notes,
@@ -236,6 +238,8 @@ Map<String, dynamic> buildHandJson({
           'position': positions[e.key],
           'stack': {'amount': e.value, 'is_approx': e.key != cfg.heroSeat},
           if (e.key == cfg.heroSeat) 'is_hero': true,
+          if (e.key != cfg.heroSeat && playerTypes[e.key] != null)
+            'tags': [playerTypes[e.key]!.tag],
         }
     ],
     'hero': {'seat': cfg.heroSeat, 'cards': heroCards},

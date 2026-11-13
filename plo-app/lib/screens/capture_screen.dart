@@ -6,6 +6,7 @@ import '../coach/coach_client.dart';
 import '../hand_recorder.dart';
 import '../util.dart';
 import '../models/hand_session.dart';
+import '../models/player_type.dart';
 import '../db/hand_store.dart';
 import '../onboarding.dart';
 import '../widgets/seat_ring.dart';
@@ -62,6 +63,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
   // Per-seat starting stacks set by long-pressing a seat this hand; every
   // other seat starts with the setup form's table stack.
   Map<int, int> _stackOverrides = {};
+  // Quick reads set by long-pressing a seat this hand (ai-hand-reviewer D35),
+  // saved as the seat's tags for the AI coach. Per hand: seats here are
+  // positions, not the same real player from hand to hand.
+  Map<int, PlayerType> _types = {};
 
   // ---- live hand state
   _Phase _phase = _Phase.setup;
@@ -169,6 +174,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   /// and claims their own seat when the action reaches it (see [_claimHero]).
   void _startHand() {
     _stackOverrides = {};
+    _types = {};
     _justSaved = null;
     final cfg = _buildConfig();
     final seats = List.generate(_nPlayers, (i) => i + 1);
@@ -208,52 +214,127 @@ class _CaptureScreenState extends State<CaptureScreen> {
     });
   }
 
-  /// Long-press a seat: set its starting stack for this hand. The engine is
-  /// rebuilt from the edited config and the action so far replayed (Inv. 7);
-  /// an edit that would change what already happened — an action no longer
-  /// legal, a call turned all-in, an all-in that no longer is — is refused,
-  /// and the user can undo back past that action instead.
-  Future<void> _editStack(int seat) async {
+  /// Long-press a seat: choose that player's type (one tap, which closes the sheet) and/or set their starting stack
+  /// for this hand. The hero's own seat has no type.
+  ///
+  /// A stack edit rebuilds the engine from the edited config and replays the action so far (Inv. 7); an edit that
+  /// would change what already happened — an action no longer legal, a call turned all-in, an all-in that no longer
+  /// is — is refused, and the user can undo back past that action instead.
+  Future<void> _editSeat(int seat) async {
     final cfg = _cfg!;
     final pos = _positions[seat] ?? 'Seat $seat';
+    final isHero = seat == _heroSeat;
+    final current = cfg.initialStacks[seat]!;
     final ctrl = TextEditingController(
-        text: _isMtt
-            ? '${cfg.initialStacks[seat]}'
-            : _asDollars(cfg.initialStacks[seat]!));
+      text: _isMtt ? '$current' : _asDollars(current),
+    );
+    var type = _types[seat];
     HapticFeedback.selectionClick();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$pos stack'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.numberWithOptions(decimal: !_isMtt),
-          decoration: InputDecoration(
-            labelText: 'Stack at the start of this hand',
-            prefixText: _isMtt ? null : '\$ ',
-            suffixText: _isMtt ? 'chips' : null,
+        title: Text(isHero ? '$pos (you)' : pos),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!isHero) ...[
+                const Text(
+                  'Player type',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Optional. Helps the AI coach.',
+                  style: TextStyle(fontSize: 15, color: Colors.white70),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in PlayerType.values)
+                      ChoiceChip(
+                        key: ValueKey('type-${t.tag}'),
+                        label: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                t.label,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                t.hint,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        selected: type == t,
+                        showCheckmark: false,
+                        onSelected: (_) {
+                          // One tap sets it (or clears it, tapping it again) and closes.
+                          type = type == t ? null : t;
+                          Navigator.pop(ctx, true);
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+              TextField(
+                controller: ctrl,
+                autofocus: isHero,
+                keyboardType: TextInputType.numberWithOptions(decimal: !_isMtt),
+                decoration: InputDecoration(
+                  labelText: 'Stack at the start of this hand',
+                  prefixText: _isMtt ? null : '\$ ',
+                  suffixText: _isMtt ? 'chips' : null,
+                ),
+                onSubmitted: (_) => Navigator.pop(ctx, true),
+              ),
+            ],
           ),
-          onSubmitted: (_) => Navigator.pop(ctx, true),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Set stack')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Done'),
+          ),
         ],
       ),
     );
     final text = ctrl.text;
     if (ok != true || !mounted) return;
+    if (!isHero && type != _types[seat]) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        final next = {..._types};
+        if (type == null) {
+          next.remove(seat);
+        } else {
+          next[seat] = type!;
+        }
+        _types = next;
+      });
+    }
     final amount = _isMtt
         ? int.tryParse(text.trim())
         : switch (double.tryParse(text.trim())) {
             final d? => (d * 100).round(),
             null => null,
           };
+    if (amount == current) return; // the stack wasn't changed
     if (amount == null || amount <= 0) {
       _toast('Enter a stack above zero');
       return;
@@ -478,6 +559,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ? null
             : [for (final w in _potWinners) w.toList()],
         shownCards: Map.of(_shownCards),
+        playerTypes: Map.of(_types),
         sessionId: widget.session.id,
         markedForReview: _markedForReview,
         complete: complete,
@@ -718,7 +800,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
             // blind that won unraised), pick the showdown winner, or enter a
             // villain's shown cards. _onResultSeatTap dispatches by context.
             onSeatTap: _resultTappable ? _onResultSeatTap : null,
-            onSeatLongPress: _editStack,
+            onSeatLongPress: _editSeat,
+            seatNotes: {
+              for (final e in _types.entries)
+                if (e.key != _heroSeat) e.key: e.value.label
+            },
           ),
         ),
         const SizedBox(height: 10),
