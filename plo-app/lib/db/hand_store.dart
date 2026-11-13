@@ -46,6 +46,15 @@ class HandStore {
 $_trackerColumns
           )''';
 
+  /// The AI coach's reviews (ai-hand-reviewer D36), kept so a hand reviewed once opens again instantly and free.
+  /// One per hand; the review is the server's JSON.
+  static const _coachTable = '''
+          CREATE TABLE coach_reviews (
+            hand_id TEXT PRIMARY KEY,
+            reviewed_at INTEGER NOT NULL,
+            review TEXT NOT NULL
+          )''';
+
   Future<Database> get db async {
     if (_db != null) return _db!;
     // On web the ffi factory uses the name as an IndexedDB key; getDatabasesPath
@@ -56,7 +65,7 @@ $_trackerColumns
             : p.join(await getDatabasesPath(), 'plo_capture.db'));
     _db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onUpgrade: (d, oldV, newV) async {
         // v2: tag decision spots (hands saved mid-action) for the hand list.
         if (oldV < 2) {
@@ -85,6 +94,8 @@ $_trackerColumns
                 "ALTER TABLE sessions ADD COLUMN game TEXT NOT NULL DEFAULT 'plo4'");
           }
         }
+        // v7: the AI coach's reviews are kept.
+        if (oldV < 7) await d.execute(_coachTable);
       },
       onCreate: (d, v) async {
         await d.execute('''
@@ -115,6 +126,7 @@ $_trackerColumns
         ''');
         await d.execute(
             'CREATE INDEX idx_hands_session ON hands(session_id, captured_at)');
+        await d.execute(_coachTable);
       },
     );
     return _db!;
@@ -204,6 +216,10 @@ $_trackerColumns
   Future<void> deleteHandSession(String id) async {
     final d = await db;
     await d.transaction((txn) async {
+      await txn.rawDelete(
+          'DELETE FROM coach_reviews WHERE hand_id IN '
+          '(SELECT hand_id FROM hands WHERE session_id = ?)',
+          [id]);
       await txn.delete('hands', where: 'session_id = ?', whereArgs: [id]);
       await txn.delete('sessions', where: 'id = ?', whereArgs: [id]);
     });
@@ -282,16 +298,27 @@ $_trackerColumns
     };
   }
 
+  /// A session's hands, newest first. `reviewed` is 1 when the AI coach's review is kept for the hand.
   Future<List<Map<String, dynamic>>> handsForSession(String sessionId) async {
-    return (await db).query(
-      'hands',
-      columns: [
-        'hand_id', 'captured_at', 'hero_net', 'pot', 'marked', 'is_spot', 'json'
-      ],
-      where: 'session_id = ?',
-      whereArgs: [sessionId],
-      orderBy: 'captured_at DESC',
-    );
+    return (await db).rawQuery('''
+      SELECT h.hand_id, h.captured_at, h.hero_net, h.pot, h.marked, h.is_spot, h.json,
+             (r.hand_id IS NOT NULL) AS reviewed
+      FROM hands h
+      LEFT JOIN coach_reviews r ON r.hand_id = h.hand_id
+      WHERE h.session_id = ?
+      ORDER BY h.captured_at DESC
+    ''', [sessionId]);
+  }
+
+  /// The newest hands from every session (for the AI coach's list), each with `reviewed` as above.
+  Future<List<Map<String, dynamic>>> recentHands({int limit = 200}) async {
+    return (await db).rawQuery('''
+      SELECT h.hand_id, h.captured_at, h.json, (r.hand_id IS NOT NULL) AS reviewed
+      FROM hands h
+      LEFT JOIN coach_reviews r ON r.hand_id = h.hand_id
+      ORDER BY h.captured_at DESC
+      LIMIT ?
+    ''', [limit]);
   }
 
   /// Every hand's full canonical JSON for a session — used by the solver export.
@@ -311,8 +338,40 @@ $_trackerColumns
     return jsonDecode(rows.first['json'] as String) as Map<String, dynamic>;
   }
 
-  Future<void> deleteHand(String handId) async =>
-      (await db).delete('hands', where: 'hand_id = ?', whereArgs: [handId]);
+  Future<void> deleteHand(String handId) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete('coach_reviews', where: 'hand_id = ?', whereArgs: [handId]);
+      await txn.delete('hands', where: 'hand_id = ?', whereArgs: [handId]);
+    });
+  }
+
+  // ------------------------------------------------------- coach reviews
+
+  /// Keep the coach's review of a hand (replacing any older one).
+  Future<void> saveCoachReview(String handId, Map<String, dynamic> review,
+          {DateTime? at}) async =>
+      (await db).insert(
+        'coach_reviews',
+        {
+          'hand_id': handId,
+          'reviewed_at': (at ?? DateTime.now()).millisecondsSinceEpoch,
+          'review': jsonEncode(review),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+  /// The kept review of a hand, and when it was made; null if there's none.
+  Future<({DateTime at, Map<String, dynamic> review})?> coachReview(
+      String handId) async {
+    final rows = await (await db)
+        .query('coach_reviews', where: 'hand_id = ?', whereArgs: [handId]);
+    if (rows.isEmpty) return null;
+    return (
+      at: DateTime.fromMillisecondsSinceEpoch(rows.first['reviewed_at'] as int),
+      review: jsonDecode(rows.first['review'] as String) as Map<String, dynamic>,
+    );
+  }
 
   // -------------------------------------------------------------- backup
 

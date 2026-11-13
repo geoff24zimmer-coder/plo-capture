@@ -72,6 +72,23 @@ class CoachReview {
   final List<String> assumptions;
   const CoachReview(this.decisions, this.assumptions);
 
+  /// The server's shape, so a kept review reads back through [fromJson] exactly as it came.
+  Map<String, dynamic> toJson() => {
+        'decisions': [
+          for (final d in decisions)
+            {
+              'street': 'preflop',
+              'action_ref': d.actionRef,
+              'label': d.label.name_,
+              'verdict': d.verdict,
+              'why': d.why,
+              'next_time': d.nextTime,
+              'deep_dive': d.deepDive,
+            }
+        ],
+        'assumptions': assumptions,
+      };
+
   /// Reads the server's `review`. Returns null if it isn't the expected shape, so a bad answer is never half-shown.
   static CoachReview? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -112,7 +129,7 @@ class CoachReply {
 const _sorry = "Sorry, I couldn't reach the coach. Please check your connection and try again.";
 
 /// Asks the coach to review [hand], the hand exactly as the app stores it (plo-hand-history.schema.json).
-/// The coach takes about a minute; this waits up to three minutes.
+/// The coach takes a minute or two; this waits up to three minutes.
 Future<CoachReply> requestReview(
   Map<String, dynamic> hand, {
   http.Client? client,

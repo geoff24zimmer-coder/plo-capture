@@ -5,7 +5,9 @@ import '../tracker/format.dart';
 import '../widgets/backup_sheet.dart';
 import '../widgets/hand_session_sheet.dart';
 import '../widgets/home_actions.dart';
+import '../coach/coach_client.dart';
 import 'capture_screen.dart';
+import 'coach_hands_screen.dart';
 import 'equity_screen.dart';
 import 'hand_list_screen.dart';
 import 'hand_sessions_screen.dart';
@@ -94,6 +96,18 @@ class _LandingScreenState extends State<LandingScreen> {
                 onTap: () => _push(const HandSessionsScreen()),
               ),
               const SizedBox(height: 12),
+              // The AI coach (ai-hand-reviewer D36): its own tile, so a review is two taps from home. Only in builds
+              // with the coach.
+              if (coachEnabled) ...[
+                HomeAction(
+                  title: 'AI coach',
+                  subtitle: 'Review your play in a hand',
+                  icon: Icons.school_outlined,
+                  accent: homeCoach,
+                  onTap: () => _push(const CoachHandsScreen()),
+                ),
+                const SizedBox(height: 12),
+              ],
               HomeAction(
                 title: 'Session tracker',
                 subtitle: 'Results, calendar & win rate',

@@ -2,16 +2,41 @@
 // study screen, never part of capture at the table.
 //
 // Built for older players first (ai-hand-reviewer docs/UX_SIMPLICITY.md): body text at least 20 px, buttons at least
-// 56 px tall, one main action. The coach takes about a minute, so the waiting view says what's happening and the
-// player can stop. Each decision's "Go deeper" (D31) stays closed until tapped, so the short review is easy to read.
+// 56 px tall, one main action. The coach takes a minute or two, so the waiting view says what's happening and the
+// player can stop (a review that arrives after that is still kept). Each decision's "Go deeper" (D31) stays closed
+// until tapped, so the short review is easy to read.
+// Reviews are kept on the device (D36): a hand reviewed once opens again instantly, and never costs a second review.
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../coach/coach_client.dart';
+import '../db/hand_store.dart';
+import '../tracker/format.dart';
 
 typedef ReviewRequest = Future<CoachReply> Function(Map<String, dynamic> hand);
+typedef KeptReview = ({DateTime at, CoachReview review});
+typedef LoadKeptReview = Future<KeptReview?> Function(String handId);
+typedef KeepReview = Future<void> Function(String handId, CoachReview review);
+
+/// The review kept on this device for a hand, if any. Never throws: no kept review just means asking the coach.
+Future<KeptReview?> loadKeptReview(String handId) async {
+  try {
+    final kept = await HandStore.instance.coachReview(handId);
+    final review = kept == null ? null : CoachReview.fromJson(kept.review);
+    return review == null ? null : (at: kept!.at, review: review);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Keeps a review on this device. A failure only means it isn't kept.
+Future<void> keepReview(String handId, CoachReview review) async {
+  try {
+    await HandStore.instance.saveCoachReview(handId, review.toJson());
+  } catch (_) {}
+}
 
 const _gold = Color(0xFFF0C75A);
 const _labelColors = {
@@ -36,9 +61,17 @@ const disclosure = 'AI coach · for study only, not for use during play';
 class CoachReviewScreen extends StatefulWidget {
   final Map<String, dynamic> hand;
 
-  /// For tests; the real coach otherwise.
+  /// For tests; the real coach and the device's hand store otherwise.
   final ReviewRequest request;
-  const CoachReviewScreen({super.key, required this.hand, this.request = requestReview});
+  final LoadKeptReview loadKept;
+  final KeepReview keep;
+  const CoachReviewScreen({
+    super.key,
+    required this.hand,
+    this.request = requestReview,
+    this.loadKept = loadKeptReview,
+    this.keep = keepReview,
+  });
 
   @override
   State<CoachReviewScreen> createState() => _CoachReviewScreenState();
@@ -51,6 +84,9 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
   Timer? _ticker;
   int _run = 0;
 
+  /// When the review shown was made, if it was kept from an earlier visit.
+  DateTime? _keptAt;
+
   String? get _id => widget.hand['hand_id'] as String?;
 
   @override
@@ -59,9 +95,25 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
     final cached = _id == null ? null : reviewCache[_id];
     if (cached != null) {
       _review = cached;
+    } else if (_id != null) {
+      _openKeptOrAsk(_id!);
     } else {
       _ask();
     }
+  }
+
+  Future<void> _openKeptOrAsk(String id) async {
+    final kept = await widget.loadKept(id);
+    if (!mounted) return;
+    if (kept == null) {
+      _ask();
+      return;
+    }
+    reviewCache[id] = kept.review;
+    setState(() {
+      _review = kept.review;
+      _keptAt = kept.at;
+    });
   }
 
   Future<void> _ask() async {
@@ -76,11 +128,15 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
     });
     final reply = await widget.request(widget.hand);
     _ticker?.cancel();
+    // Kept even if the player has left this screen: the review is paid for, and the hand shows as reviewed.
+    if (reply.ok && _id != null) {
+      reviewCache[_id!] = reply.review!;
+      widget.keep(_id!, reply.review!);
+    }
     if (!mounted || run != _run) return;
     setState(() {
       if (reply.ok) {
         _review = reply.review;
-        if (_id != null) reviewCache[_id!] = reply.review!;
       } else {
         _error = reply.message;
       }
@@ -141,7 +197,7 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            const Text('The coach takes about a minute.',
+            const Text('The coach takes a minute or two.',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 20, color: Colors.white70)),
             const SizedBox(height: 28),
             _big('Stop', primary: false, onPressed: () => Navigator.of(context).pop()),
@@ -173,6 +229,12 @@ class _CoachReviewScreenState extends State<CoachReviewScreen> {
   Widget _reviewView(CoachReview review) => ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
+          if (_keptAt != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text('Reviewed ${shortDate(_keptAt!)} · kept on this device',
+                  style: const TextStyle(fontSize: 18, color: Colors.white70)),
+            ),
           for (final d in review.decisions) _decisionCard(d),
           if (review.assumptions.isNotEmpty)
             Card(

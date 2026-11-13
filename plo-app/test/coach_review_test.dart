@@ -59,6 +59,14 @@ void main() {
       expect(r.decisions[1].deepDive, isEmpty); // older reviews have none
     });
 
+    test('toJson reads back as the same review (kept reviews, D36)', () {
+      final r = CoachReview.fromJson(_review)!;
+      final back = CoachReview.fromJson(jsonDecode(jsonEncode(r.toJson())))!;
+      expect(back.decisions.map((d) => [d.actionRef, d.label, d.verdict, d.why, d.nextTime, d.deepDive]),
+          r.decisions.map((d) => [d.actionRef, d.label, d.verdict, d.why, d.nextTime, d.deepDive]));
+      expect(back.assumptions, r.assumptions);
+    });
+
     test('a review in the wrong shape is refused whole, never half-shown', () {
       expect(CoachReview.fromJson(null), isNull);
       expect(CoachReview.fromJson({'decisions': [], 'assumptions': []}), isNull);
@@ -138,21 +146,59 @@ void main() {
   });
 
   group('CoachReviewScreen', () {
+    /// Reviews kept "on the device" for these tests.
+    final kept = <String, KeptReview>{};
+    setUp(kept.clear);
+
     Future<void> pump(WidgetTester t, ReviewRequest request) async {
       t.view.physicalSize = const Size(390 * 3, 844 * 3);
       t.view.devicePixelRatio = 3;
       addTearDown(t.view.reset);
       await t.pumpWidget(MaterialApp(
         theme: ThemeData(brightness: Brightness.dark),
-        home: CoachReviewScreen(hand: _hand, request: request),
+        home: CoachReviewScreen(
+          hand: _hand,
+          request: request,
+          loadKept: (id) async => kept[id],
+          keep: (id, r) async => kept[id] = (at: DateTime(2026, 11, 13), review: r),
+        ),
       ));
     }
+
+    testWidgets('a new review is kept on the device (D36)', (t) async {
+      await pump(t, (_) async => CoachReply.ok(CoachReview.fromJson(_review)!));
+      await t.pumpAndSettle();
+      expect(kept['hand-1']?.review.decisions, hasLength(2));
+      expect(find.textContaining('kept on this device'), findsNothing); // it's new, not kept from before
+    });
+
+    testWidgets('leaving while the coach works still keeps the review when it comes', (t) async {
+      final answer = Completer<CoachReply>();
+      await pump(t, (_) => answer.future);
+      await t.pumpWidget(const SizedBox()); // the player leaves (Stop or back)
+      answer.complete(CoachReply.ok(CoachReview.fromJson(_review)!));
+      await t.pump();
+      expect(kept['hand-1']?.review.decisions, hasLength(2));
+    });
+
+    testWidgets('a kept review opens instantly, says when it was made, and never asks the coach again', (t) async {
+      kept['hand-1'] = (at: DateTime(2026, 11, 12, 21), review: CoachReview.fromJson(_review)!);
+      var calls = 0;
+      await pump(t, (_) async {
+        calls++;
+        return const CoachReply.failed('should not be asked');
+      });
+      await t.pumpAndSettle();
+      expect(calls, 0);
+      expect(find.text('Reviewed Nov 12 · kept on this device'), findsOneWidget);
+      expect(find.text('Your pot 3-bet from the button'), findsOneWidget);
+    });
 
     testWidgets('waits with a plain message, then shows one card per decision', (t) async {
       final answer = Completer<CoachReply>();
       await pump(t, (_) => answer.future);
       expect(find.text('Looking at your hand…'), findsOneWidget);
-      expect(find.text('The coach takes about a minute.'), findsOneWidget);
+      expect(find.text('The coach takes a minute or two.'), findsOneWidget);
       expect(find.text(disclosure), findsOneWidget);
 
       answer.complete(CoachReply.ok(CoachReview.fromJson(_review)!));

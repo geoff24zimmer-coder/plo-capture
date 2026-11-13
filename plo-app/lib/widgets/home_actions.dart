@@ -4,6 +4,8 @@ const homeEmerald = Color(0xFF10B981);
 const homeGold = Color(0xFFC9A536);
 const homeBlue = Color(0xFF378ADD);
 const homeViolet = Color(0xFF8B7CF6);
+/// The AI coach's gold, as on its buttons.
+const homeCoach = Color(0xFFF0C75A);
 
 /// A home-screen feature button: accent icon chip, title, one-line subtitle,
 /// chevron. [filled] makes it the primary call to action (solid accent).

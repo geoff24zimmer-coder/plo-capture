@@ -293,6 +293,7 @@ class _HandListScreenState extends State<HandListScreen> {
                   h['captured_at'] as int);
               final marked = (h['marked'] as int) == 1;
               final isSpot = (h['is_spot'] as int? ?? 0) == 1;
+              final reviewed = (h['reviewed'] as int? ?? 0) == 1;
               final label = handLabel(
                   jsonDecode(h['json'] as String) as Map<String, dynamic>);
               final time =
@@ -317,6 +318,15 @@ class _HandListScreenState extends State<HandListScreen> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // The AI coach's review is kept for this hand (ai-hand-reviewer D36).
+                    if (reviewed)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Tooltip(
+                          message: 'AI coach reviewed',
+                          child: Icon(Icons.school, color: Color(0xFFF0C75A), size: 20),
+                        ),
+                      ),
                     if (net != null)
                       Text(
                         money(net),
