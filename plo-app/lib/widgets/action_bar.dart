@@ -98,7 +98,17 @@ class ActionBar extends StatelessWidget {
       }
     }
 
-    // Pot (emphasised) — the only raise size offered in cash.
+    // Texas $1/$3 with a straddle (ai-hand-reviewer D38): the open can be up to 5 straddles, more than the pot.
+    // One tap, since it's a common open there. Shown as 5× unless the stack caps it lower.
+    if (la.texasOpen) {
+      out.add(Expanded(
+        child: _sizeBtn(max == texasOpenMultiple * currentBet ? '5×' : 'MAX',
+            max, () => onAction(act, amount: max)),
+      ));
+      out.add(const SizedBox(width: 6));
+    }
+
+    // Pot (emphasised) — the only other raise size offered in cash.
     out.add(Expanded(
       flex: 2,
       child: FilledButton(
@@ -197,7 +207,7 @@ class ActionBar extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.5))),
-                    Text('Max (pot) ${fmtAmt(max)}',
+                    Text('Max${la.texasOpen ? '' : ' (pot)'} ${fmtAmt(max)}',
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.5))),

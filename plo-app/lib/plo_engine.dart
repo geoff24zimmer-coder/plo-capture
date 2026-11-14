@@ -77,6 +77,8 @@ class LegalActions {
   final bool canBetOrRaise; // false when a short all-in failed to reopen action
   final int? minRaiseTo;
   final int? maxRaiseTo; // pot-limit max, stack-capped
+  /// True when [maxRaiseTo] is over the pot because of the Texas 5-straddle open.
+  final bool texasOpen;
   final BetSizing? sizing;
   const LegalActions({
     required this.seat,
@@ -86,6 +88,7 @@ class LegalActions {
     required this.canBetOrRaise,
     this.minRaiseTo,
     this.maxRaiseTo,
+    this.texasOpen = false,
     this.sizing,
   });
 }
@@ -141,10 +144,34 @@ class EngineException implements Exception {
   String toString() => 'EngineException: $message';
 }
 
+/// Texas $1/$3 PLO with a straddle (ai-hand-reviewer D38, Geoff: "Texas allows for 5x opens ... first person in
+/// could raise to 30 off the 6 dollar straddle"): the first raise before the flop can be up to this many straddles,
+/// even when the pot allows less ($22 first in). After it, raises are pot-limit again.
+const texasOpenMultiple = 5;
+
+/// The most an opening raise can be in Texas $1/$3 cash with a straddle (cents), or null for any other game.
+int? texasOpenRaiseTo({
+  required String gameType,
+  required int smallBlind,
+  required int bigBlind,
+  required List<ForcedBet> forcedBets,
+}) {
+  if (gameType != 'cash' || smallBlind != 100 || bigBlind != 300) return null;
+  var straddle = 0;
+  for (final f in forcedBets) {
+    if (f.isStraddle && f.amount > straddle) straddle = f.amount;
+  }
+  return straddle > 0 ? texasOpenMultiple * straddle : null;
+}
+
 class HandEngine {
   final int buttonSeat;
   final int bigBlind;
   final StraddleActionRule straddleRule;
+
+  /// Texas $1/$3 with a straddle: the most the first preflop raise can be (see [texasOpenRaiseTo]); null otherwise.
+  final int? openRaiseCapTo;
+  bool _raisedPreflop = false;
 
   final Map<int, PlayerState> players = {};
   final List<int> _seatOrder = []; // occupied seats, clockwise
@@ -174,6 +201,7 @@ class HandEngine {
     required this.bigBlind,
     required List<ForcedBet> forcedBets,
     this.straddleRule = StraddleActionRule.utgFirstStraddlerLast,
+    this.openRaiseCapTo,
   }) {
     final sorted = [...seatedPlayers]..sort((a, b) => a.seat.compareTo(b.seat));
     for (final p in sorted) {
@@ -383,10 +411,21 @@ class HandEngine {
 
     final canRaise = !_raiseBlocked.contains(seat) && allInTo > currentBet;
     int? minTo, maxTo;
+    var texasOpen = false;
     BetSizing? sizing;
     if (canRaise) {
       maxTo = currentBet + potAfterCall;
+      // Texas $1/$3 with a straddle: the open can be bigger than the pot.
+      final cap = openRaiseCapTo;
+      final pot = maxTo;
+      if (street == Street.preflop &&
+          !_raisedPreflop &&
+          cap != null &&
+          cap > maxTo) {
+        maxTo = cap;
+      }
       if (maxTo > allInTo) maxTo = allInTo;
+      texasOpen = maxTo > pot;
       minTo = currentBet + _lastRaiseSize;
       if (minTo > maxTo) minTo = maxTo; // short all-in is always allowed
       int frac(num f) {
@@ -407,6 +446,7 @@ class HandEngine {
       canBetOrRaise: canRaise,
       minRaiseTo: minTo,
       maxRaiseTo: maxTo,
+      texasOpen: texasOpen,
       sizing: sizing,
     );
   }
@@ -463,6 +503,7 @@ class HandEngine {
         final oldBet = currentBet;
         _commit(p, to - p.streetCommit);
         currentBet = to;
+        if (street == Street.preflop) _raisedPreflop = true;
         isAllIn = p.stack == 0;
         recordedAmount = to;
 

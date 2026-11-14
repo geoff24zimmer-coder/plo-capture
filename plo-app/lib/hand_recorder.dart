@@ -58,6 +58,12 @@ class HandConfig {
         bigBlind: bigBlind,
         forcedBets: forcedBets,
         straddleRule: straddleRule,
+        openRaiseCapTo: texasOpenRaiseTo(
+          gameType: gameType,
+          smallBlind: smallBlind,
+          bigBlind: bigBlind,
+          forcedBets: forcedBets,
+        ),
       );
 }
 
